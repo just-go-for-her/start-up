@@ -83,6 +83,7 @@ else:
             text-align: center; border: 1px solid #dee2e6; 
             flex: 1; display: flex; flex-direction: column; gap: 8px; 
             transition: all 0.2s ease;
+            position: relative; /* z-index용 */
         }}
         
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
@@ -266,19 +267,18 @@ else:
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
 
-            // [기존 코드 유지] 슬라이더 오른쪽 이동(역방향) 막기
-            if (val > 0) {{
-                alert(`안내: 현재 [${{p.a}}] 항목의 순위가 더 높습니다. 설정하신 순서에 맞게 왼쪽 방향으로 응답해 주세요.`);
-                slider.value = 0; val = 0;
-            }}
+            // [자유 이동] 슬라이더 제한 Alert 제거됨
 
             const disp = document.getElementById('val-display');
             let perc = (val + 4) * 12.5;
             if(val < 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 ${{perc}}%, #228be6 ${{perc}}%, #228be6 50%, #dee2e6 50%, #dee2e6 100%)`;
+            else if(val > 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 50%, #fa5252 50%, #fa5252 ${{perc}}%, #dee2e6 ${{perc}}%, #dee2e6 100%)`;
             else slider.style.background = '#dee2e6';
 
             if(val == 0) disp.innerText = "동등함 (1:1)";
-            else disp.innerText = `${{p.a}} ${{Math.abs(val)+1}}배 중요`;
+            else if(val < 0) disp.innerText = `${{p.a}} ${{Math.abs(val)+1}}배 중요`;
+            else disp.innerText = `${{p.b}} ${{Math.abs(val)+1}}배 중요`; 
+            
             updateBoard();
         }}
 
@@ -293,18 +293,19 @@ else:
             let rankMap = {{}}; 
             let currentRank = 1;
             sortedWeights.forEach((w, i) => {{
-                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{}} else {{ currentRank = i + 1; }}
+                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{ }} else {{ currentRank = i + 1; }}
                 rankMap[w.toFixed(6)] = currentRank;
             }});
 
-            // [핵심] 역전된 항목 찾기 (쌍방 체크)
+            // [쌍방 체크] 역전된 모든 항목 수집
             let flippedSet = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
                     // 내가 원래 상위(숫자 작음)인데 가중치가 하위(확실히 작음)
+                    // -> 나(i)는 피해자, 상대(j)는 수혜자. 둘 다 추가.
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedSet.add(i); flippedSet.add(j); // 둘 다 추가
+                        flippedSet.add(i); flippedSet.add(j);
                     }}
                 }}
             }}
@@ -331,8 +332,11 @@ else:
                 
                 let isFlipped = flippedSet.has(item.idx);
                 
-                // [강제 스타일] 붉은 테두리 3px + 배경색
-                let style = isFlipped ? "border: 3px solid #fa5252 !important; background-color: #ffe3e3;" : "border: 1px solid #dee2e6; background-color: white;";
+                // [강제 스타일] 붉은 테두리 + 배경 + 그림자 추가
+                let style = isFlipped 
+                    ? "border: 3px solid #fa5252 !important; background-color: #fff5f5 !important; box-shadow: 0 0 10px rgba(250, 82, 82, 0.3);" 
+                    : "border: 1px solid #dee2e6; background-color: white;";
+                
                 let rankColorClass = isFlipped ? "error-color" : "match-color";
 
                 grid.innerHTML += `<div class="board-item" style="${{style}}">
@@ -354,8 +358,14 @@ else:
             let tempMatrix = matrix.map(row => [...row]);
             let p = pairs[pairIdx];
             let val = tempVal !== null ? tempVal : parseInt(document.getElementById('slider').value);
-            let w = val === 0 ? 1 : (Math.abs(val)+1);
-            tempMatrix[p.r][p.c] = w; tempMatrix[p.c][p.r] = 1/w;
+            
+            // [계산] 음수(왼쪽)는 A우세, 양수(오른쪽)는 B우세
+            let w_abs = Math.abs(val) + 1;
+            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
+
+            tempMatrix[p.r][p.c] = w_final; 
+            tempMatrix[p.c][p.r] = 1 / w_final;
+            
             for(let i=0; i<n; i++) {{ for(let j=0; j<n; j++) {{ if(tempMatrix[i][j] === 0) tempMatrix[i][j] = 1; }} }}
             let weights = tempMatrix.map(row => Math.pow(row.reduce((a, b) => a * b, 1), 1/n));
             let sum = weights.reduce((a, b) => a + b, 0);
@@ -367,8 +377,12 @@ else:
             if(n <= 2) return 0;
             let tempMatrix = matrix.map(row => [...row]);
             let p = pairs[pairIdx];
-            let w = currentVal === 0 ? 1 : (Math.abs(currentVal)+1);
-            tempMatrix[p.r][p.c] = w; tempMatrix[p.c][p.r] = 1/w;
+            
+            let w_abs = Math.abs(currentVal) + 1;
+            let w_final = (currentVal <= 0) ? w_abs : (1 / w_abs);
+
+            tempMatrix[p.r][p.c] = w_final; 
+            tempMatrix[p.c][p.r] = 1 / w_final;
             
             let weights = calculateWeights(currentVal);
             let lambdaMax = 0;
@@ -403,11 +417,13 @@ else:
 
             let flippedPairs = [];
             for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(i === j) continue;
-                    // 내가 원래 상위인데 가중치가 확실히 작으면 역전
-                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
+                for(let j=i+1; j<items.length; j++) {{
+                    let u = i, v = j;
+                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
+                        flippedPairs.push(`${{items[u]}} (설정: ${{initialRanks[u]}}위) ↔ ${{items[v]}} (설정: ${{initialRanks[v]}}위)`);
+                    }}
+                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
+                        flippedPairs.push(`${{items[v]}} (설정: ${{initialRanks[v]}}위) ↔ ${{items[u]}} (설정: ${{initialRanks[u]}}위)`);
                     }}
                 }}
             }}
@@ -476,10 +492,13 @@ else:
 
         function saveAndNext() {{
             const val = parseInt(document.getElementById('slider').value);
-            const w = val === 0 ? 1 : (Math.abs(val)+1);
+            // 저장 로직도 음수/양수 방향성 고려
+            let w_abs = Math.abs(val) + 1;
+            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
+
             const p = pairs[pairIdx];
-            matrix[p.r][p.c] = w; matrix[p.c][p.r] = 1/w;
-            allAnswers[`[${{tasks[currentTaskIdx].name}}] ${{p.a}} vs ${{p.b}}`] = w.toFixed(2);
+            matrix[p.r][p.c] = w_final; matrix[p.c][p.r] = 1/w_final;
+            allAnswers[`[${{tasks[currentTaskIdx].name}}] ${{p.a}} vs ${{p.b}}`] = w_final.toFixed(2);
             pairIdx++;
             if (pairIdx >= pairs.length) {{ currentTaskIdx++; loadTask(); }}
             else {{ renderPair(); }}
