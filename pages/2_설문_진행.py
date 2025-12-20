@@ -88,8 +88,6 @@ else:
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
         .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: #666; padding: 0 4px; }}
         .rank-val {{ font-weight: bold; color: #444; }}
-        
-        /* 텍스트 색상 클래스 */
         .error-text {{ color: #fa5252 !important; font-weight: 800; }}
         .match-text {{ color: #228be6; }}
 
@@ -267,28 +265,47 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
+            // [랭크 계산] 가중치 내림차순 정렬 -> 순위 부여 (동점자 같은 등수)
             let sortedWeights = [...weights].sort((a,b) => b-a);
-            let rankMap = {{}}; 
+            let rankMap = {{}}; // idx -> current_rank
             let currentRank = 1;
             sortedWeights.forEach((w, i) => {{
                 if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{ }} else {{ currentRank = i + 1; }}
-                rankMap[w.toFixed(6)] = currentRank;
+                // rankMap을 위해 원래 인덱스를 찾아야 함. weights 배열에서 값으로 인덱스 찾기 (유일값 가정)
+                // 하지만 weights는 중복될 수 있으므로, sortedIdx 객체 배열 사용이 더 정확함.
+            }});
+            
+            // [수정된 랭크 매핑 로직] 인덱스 보존
+            let indexedWeights = weights.map((w, i) => ({{w, i}}));
+            indexedWeights.sort((a, b) => b.w - a.w);
+            currentRank = 1;
+            indexedWeights.forEach((obj, i) => {{
+                if (i > 0 && Math.abs(obj.w - indexedWeights[i-1].w) < EPSILON) {{}} else {{ currentRank = i + 1; }}
+                rankMap[obj.i] = currentRank;
             }});
 
-            // [핵심] 역전된 항목 찾기 (쌍방 체크)
-            let flippedSet = new Set();
+            // [핵심] 순위 역전 감지 (숫자 비교: Rank Number가 더 커지면 순위 하락)
+            let flippedIndices = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 조건: 내가(i) 원래 상위(rank숫자 작음)인데 가중치가 상대(j)보다 확실히 작음(역전)
-                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedSet.add(i); // 나(피해자: 2위였는데 3위됨)
-                        flippedSet.add(j); // 너(수혜자: 3위였는데 2위됨)
+                    
+                    let initRankI = initialRanks[i];
+                    let initRankJ = initialRanks[j];
+                    let curRankI = rankMap[i];
+                    let curRankJ = rankMap[j];
+
+                    // 조건: 내가(i) 원래 상위(1등)였는데, 지금은 하위(2등)가 됨 (상대방 j와 비교했을 때)
+                    // 즉, (초기: i < j) AND (현재: i > j) ==> 역전!
+                    // 동점(Tie)은 i > j 가 성립 안하므로 제외됨 (안전)
+                    if (initRankI < initRankJ && curRankI > curRankJ) {{
+                        flippedIndices.add(i); // 나(순위 하락)
+                        flippedIndices.add(j); // 너(순위 상승)
                     }}
                 }}
             }}
 
-            let hasFlip = (flippedSet.size > 0);
+            let hasFlip = (flippedIndices.size > 0);
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
 
@@ -307,16 +324,14 @@ else:
                 }}
 
                 fixedOrder.forEach(item => {{
-                    let isFlipped = flippedSet.has(item.idx);
+                    let isFlipped = flippedIndices.has(item.idx);
                     let curRank = rankMap[item.idx];
                     grid.innerHTML += createCard(item.name, item.org, curRank, isFlipped);
                 }});
             }}
         }}
 
-        // [HTML 생성 함수 분리] -> 스타일 강제 적용
         function createCard(name, oldRank, newRank, isFlipped) {{
-            // isFlipped가 true면 무조건 붉은 테두리와 배경을 인라인 스타일로 적용
             let borderStyle = isFlipped ? "3px solid #fa5252 !important" : "1px solid #dee2e6";
             let bgStyle = isFlipped ? "#fff5f5 !important" : "white";
             let textColorClass = isFlipped ? "error-text" : "match-text";
@@ -351,15 +366,29 @@ else:
             if (pairIdx === 0) {{ saveAndNext(); return; }}
             const sliderVal = parseInt(document.getElementById('slider').value);
             let weights = calculateWeights(sliderVal);
+            
+            // [로직 동일 적용] 순위 기반 역전 감지
+            let indexedWeights = weights.map((w, i) => ({{w, i}}));
+            indexedWeights.sort((a, b) => b.w - a.w);
+            let rankMap = {{}};
+            let currentRank = 1;
             const EPSILON = 0.00001;
+            indexedWeights.forEach((obj, i) => {{
+                if (i > 0 && Math.abs(obj.w - indexedWeights[i-1].w) < EPSILON) {{}} else {{ currentRank = i + 1; }}
+                rankMap[obj.i] = currentRank;
+            }});
 
             let flippedPairs = [];
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 역전 감지 (모달용 텍스트)
-                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
+                    let initRankI = initialRanks[i];
+                    let initRankJ = initialRanks[j];
+                    let curRankI = rankMap[i];
+                    let curRankJ = rankMap[j];
+
+                    if (initRankI < initRankJ && curRankI > curRankJ) {{
+                        flippedPairs.push(`${{items[i]}} (기존 ${{initRankI}}위) ↔ ${{items[j]}} (기존 ${{initRankJ}}위)`);
                     }}
                 }}
             }}
@@ -374,7 +403,6 @@ else:
                 return; 
             }}
 
-            // CR 체크 로직은 삭제됨 (바로 저장 후 이동)
             saveAndNext();
         }}
 
@@ -382,9 +410,12 @@ else:
             document.getElementById('modal-' + type).style.display = 'none';
             if(type === 'flip') {{
                 if(action === 'updaterank') {{
+                    // [순위 업데이트 로직] 가중치 순으로 재정렬
                     let weights = calculateWeights();
                     let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
                     sortedIdx.forEach((idx, i) => {{ initialRanks[idx] = i + 1; }});
+                    
+                    // 질문 순서 재조정 (선택사항이나, 논리적 흐름 유지를 위해)
                     for (let k = pairIdx; k < pairs.length; k++) {{
                         let p = pairs[k];
                         if (initialRanks[p.r] > initialRanks[p.c]) {{
