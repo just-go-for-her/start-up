@@ -72,7 +72,7 @@ else:
         .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
         .step {{ display: none; }} .active {{ display: block; }}
         
-        /* 랭킹 보드 스타일 (단순화) */
+        /* 랭킹 보드 스타일 */
         .ranking-board {{ background: #f1f3f5; padding: 18px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #dee2e6; }}
         .board-title {{ font-weight: bold; color: #495057; font-size: 0.9em; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }}
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
@@ -208,16 +208,16 @@ else:
             document.getElementById('hint-b').innerText = initialRanks[p.c];
             document.getElementById('slider').value = 0;
             
-            // [버튼 로직 변경]
+            // [버튼 로직 변경 핵심]
             const btnArea = document.getElementById('btn-area');
             if (pairIdx === 0) {{
-                // 첫 질문: [순위 변경] [다음]
+                // 첫 질문: [순위 재설정] + [다음]
                 btnArea.innerHTML = `
-                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 변경</button>
+                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 재설정</button>
                     <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
                 `;
             }} else {{
-                // 이후: [이전] [다음]
+                // 이후: [이전] + [다음]
                 btnArea.innerHTML = `
                     <button class="btn btn-secondary" onclick="goBack()">⬅ 이전 질문</button>
                     <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
@@ -232,8 +232,6 @@ else:
             const slider = document.getElementById('slider');
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
-
-            // 오른쪽 이동 제한 Alert 제거됨 (자유 이동)
 
             const disp = document.getElementById('val-display');
             let perc = (val + 4) * 12.5;
@@ -255,7 +253,7 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // 현재 가중치 순위 계산 (보여주기용)
+            // 현재 가중치 순위 계산
             let sortedWeights = weights.map((w, i) => ({{w, i}})).sort((a,b) => b.w - a.w);
             let rankMap = {{}};
             let currentRank = 1;
@@ -264,7 +262,7 @@ else:
                 rankMap[obj.i] = currentRank;
             }});
 
-            // 설정 순서대로 카드 배치 (붉은 테두리 로직 완전 제거 -> 깔끔한 정보 제공)
+            // 설정 순서대로 카드 배치 (심플 버전)
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
 
@@ -304,7 +302,7 @@ else:
             const EPSILON = 0.00001;
 
             let flippedPairs = [];
-            // 역전 감지 (모달용 텍스트 생성)
+            // 역전 감지 (가중치 기준)
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
