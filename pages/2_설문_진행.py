@@ -265,26 +265,17 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // [랭크 계산] 가중치 내림차순 정렬 -> 순위 부여 (동점자 같은 등수)
-            let sortedWeights = [...weights].sort((a,b) => b-a);
-            let rankMap = {{}}; // idx -> current_rank
+            // 1. 현재 가중치 기반 순위 계산 (보여주기용 & 비교용)
+            // 중복 가중치(동점) 처리 포함
+            let sortedWeights = weights.map((w, i) => ({{w, i}})).sort((a,b) => b.w - a.w);
+            let rankMap = {{}}; // index -> rank
             let currentRank = 1;
-            sortedWeights.forEach((w, i) => {{
-                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{ }} else {{ currentRank = i + 1; }}
-                // rankMap을 위해 원래 인덱스를 찾아야 함. weights 배열에서 값으로 인덱스 찾기 (유일값 가정)
-                // 하지만 weights는 중복될 수 있으므로, sortedIdx 객체 배열 사용이 더 정확함.
-            }});
-            
-            // [수정된 랭크 매핑 로직] 인덱스 보존
-            let indexedWeights = weights.map((w, i) => ({{w, i}}));
-            indexedWeights.sort((a, b) => b.w - a.w);
-            currentRank = 1;
-            indexedWeights.forEach((obj, i) => {{
-                if (i > 0 && Math.abs(obj.w - indexedWeights[i-1].w) < EPSILON) {{}} else {{ currentRank = i + 1; }}
+            sortedWeights.forEach((obj, idx) => {{
+                if (idx > 0 && Math.abs(obj.w - sortedWeights[idx-1].w) < EPSILON) {{}} else {{ currentRank = idx + 1; }}
                 rankMap[obj.i] = currentRank;
             }});
 
-            // [핵심] 순위 역전 감지 (숫자 비교: Rank Number가 더 커지면 순위 하락)
+            // [핵심] 순위 역전 감지 (쌍방 체크)
             let flippedIndices = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
@@ -295,12 +286,11 @@ else:
                     let curRankI = rankMap[i];
                     let curRankJ = rankMap[j];
 
-                    // 조건: 내가(i) 원래 상위(1등)였는데, 지금은 하위(2등)가 됨 (상대방 j와 비교했을 때)
-                    // 즉, (초기: i < j) AND (현재: i > j) ==> 역전!
-                    // 동점(Tie)은 i > j 가 성립 안하므로 제외됨 (안전)
+                    // 조건: 원래 i가 상위(1등)였는데, 지금 i가 하위(3등)가 됨. (j와 비교 시)
+                    // 즉, i < j 였는데, i > j 가 됨 (순위 숫자가 클수록 하위)
                     if (initRankI < initRankJ && curRankI > curRankJ) {{
-                        flippedIndices.add(i); // 나(순위 하락)
-                        flippedIndices.add(j); // 너(순위 상승)
+                        flippedIndices.add(i); // 나 (순위 떨어짐)
+                        flippedIndices.add(j); // 너 (순위 올라감)
                     }}
                 }}
             }}
@@ -332,6 +322,7 @@ else:
         }}
 
         function createCard(name, oldRank, newRank, isFlipped) {{
+            // 스타일 강제 적용 (인라인)
             let borderStyle = isFlipped ? "3px solid #fa5252 !important" : "1px solid #dee2e6";
             let bgStyle = isFlipped ? "#fff5f5 !important" : "white";
             let textColorClass = isFlipped ? "error-text" : "match-text";
@@ -366,29 +357,15 @@ else:
             if (pairIdx === 0) {{ saveAndNext(); return; }}
             const sliderVal = parseInt(document.getElementById('slider').value);
             let weights = calculateWeights(sliderVal);
-            
-            // [로직 동일 적용] 순위 기반 역전 감지
-            let indexedWeights = weights.map((w, i) => ({{w, i}}));
-            indexedWeights.sort((a, b) => b.w - a.w);
-            let rankMap = {{}};
-            let currentRank = 1;
             const EPSILON = 0.00001;
-            indexedWeights.forEach((obj, i) => {{
-                if (i > 0 && Math.abs(obj.w - indexedWeights[i-1].w) < EPSILON) {{}} else {{ currentRank = i + 1; }}
-                rankMap[obj.i] = currentRank;
-            }});
 
             let flippedPairs = [];
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    let initRankI = initialRanks[i];
-                    let initRankJ = initialRanks[j];
-                    let curRankI = rankMap[i];
-                    let curRankJ = rankMap[j];
-
-                    if (initRankI < initRankJ && curRankI > curRankJ) {{
-                        flippedPairs.push(`${{items[i]}} (기존 ${{initRankI}}위) ↔ ${{items[j]}} (기존 ${{initRankJ}}위)`);
+                    // 역전 감지 (모달용 텍스트) - 가중치 기준
+                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
+                        flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
                     }}
                 }}
             }}
@@ -410,12 +387,9 @@ else:
             document.getElementById('modal-' + type).style.display = 'none';
             if(type === 'flip') {{
                 if(action === 'updaterank') {{
-                    // [순위 업데이트 로직] 가중치 순으로 재정렬
                     let weights = calculateWeights();
                     let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
                     sortedIdx.forEach((idx, i) => {{ initialRanks[idx] = i + 1; }});
-                    
-                    // 질문 순서 재조정 (선택사항이나, 논리적 흐름 유지를 위해)
                     for (let k = pairIdx; k < pairs.length; k++) {{
                         let p = pairs[k];
                         if (initialRanks[p.r] > initialRanks[p.c]) {{
