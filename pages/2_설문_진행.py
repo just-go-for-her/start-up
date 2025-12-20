@@ -77,18 +77,13 @@ else:
         .status-pill {{ padding: 4px 12px; border-radius: 20px; font-size: 0.82em; font-weight: bold; }}
         
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
-        /* 테두리 스타일 기본값 설정 */
+        
+        /* 기본 아이템 스타일 */
         .board-item {{ 
             min-width: 155px; background: white; padding: 12px; border-radius: 12px; 
             text-align: center; border: 1px solid #dee2e6; 
             flex: 1; display: flex; flex-direction: column; gap: 8px; 
-            transition: all 0.3s ease;
-        }}
-        
-        /* 역전 발생 시 적용할 클래스 */
-        .flipped-item {{
-            border: 2px solid #fa5252 !important;
-            background-color: #fff5f5 !important;
+            transition: all 0.2s ease;
         }}
         
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
@@ -294,34 +289,32 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // [계산] 현재 가중치에 따른 순위 (동점자는 같은 등수로 처리)
+            // [계산] 현재 가중치에 따른 순위 
             let sortedWeights = [...weights].sort((a,b) => b-a);
-            let rankMap = {{}}; // "0.123456" -> 1
+            let rankMap = {{}}; 
             let currentRank = 1;
             sortedWeights.forEach((w, i) => {{
                 if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{
-                    // 이전 점수와 같으면 등수 유지
+                    // 동점자 랭크 유지
                 }} else {{
                     currentRank = i + 1;
                 }}
                 rankMap[w.toFixed(6)] = currentRank;
             }});
 
-            // [판단] 역전된 항목들 찾기 (쌍방 체크)
+            // [핵심] 역전된 항목들 찾기 (쌍방 체크)
             let flippedSet = new Set();
             for(let i=0; i<items.length; i++) {{
-                for(let j=i+1; j<items.length; j++) {{
-                    let u = i, v = j;
-                    // Case 1: u가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
-                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
-                        flippedSet.add(u); flippedSet.add(v);
-                    }}
-                    // Case 2: v가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
-                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
-                        flippedSet.add(u); flippedSet.add(v);
+                for(let j=0; j<items.length; j++) {{
+                    if(i === j) continue;
+                    // 내가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
+                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
+                        flippedSet.add(i); flippedSet.add(j);
                     }}
                 }}
             }}
+
+            let hasFlip = (flippedSet.size > 0);
 
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
@@ -338,19 +331,17 @@ else:
                 return;
             }}
 
-            let hasFlip = (flippedSet.size > 0);
-
             fixedOrder.forEach(item => {{
                 const myW = weights[item.idx].toFixed(6);
                 const curRank = rankMap[myW];
                 
                 let isFlipped = flippedSet.has(item.idx);
                 
-                // CSS 클래스를 이용하여 붉은 테두리 적용
-                let itemClass = "board-item" + (isFlipped ? " flipped-item" : "");
+                // [강제 스타일 주입] CSS 클래스 대신 style 속성 사용
+                let borderStyle = isFlipped ? "border: 3px solid #fa5252 !important; background-color: #ffe3e3;" : "border: 1px solid #dee2e6; background-color: white;";
                 let rankColorClass = isFlipped ? "error-color" : "match-color";
 
-                grid.innerHTML += `<div class="${{itemClass}}">
+                grid.innerHTML += `<div class="board-item" style="${{borderStyle}}">
                     <span class="item-name">${{item.name}}</span>
                     <div class="rank-row"><span>기존 순위:</span><span class="rank-val">${{item.org}}위</span></div>
                     <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{rankColorClass}}">${{curRank}}위</span></div>
@@ -418,13 +409,10 @@ else:
 
             let flippedPairs = [];
             for(let i=0; i<items.length; i++) {{
-                for(let j=i+1; j<items.length; j++) {{
-                    let u = i, v = j;
-                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
-                        flippedPairs.push(`${{items[u]}} (설정: ${{initialRanks[u]}}위) ↔ ${{items[v]}} (설정: ${{initialRanks[v]}}위)`);
-                    }}
-                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
-                        flippedPairs.push(`${{items[v]}} (설정: ${{initialRanks[v]}}위) ↔ ${{items[u]}} (설정: ${{initialRanks[u]}}위)`);
+                for(let j=0; j<items.length; j++) {{
+                    if(i === j) continue;
+                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
+                        flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
                     }}
                 }}
             }}
@@ -432,6 +420,7 @@ else:
             if (flippedPairs.length > 0) {{ 
                 const listDiv = document.getElementById('flip-details');
                 listDiv.innerHTML = "";
+                // 중복 텍스트 제거 (A<->B, B<->A는 어차피 메시지가 다르거나 하나만 뜰 수 있음)
                 [...new Set(flippedPairs)].forEach(txt => {{
                     listDiv.innerHTML += `<div class="flip-item">❌ ${{(txt)}}</div>`;
                 }});
@@ -461,7 +450,6 @@ else:
                     let weights = calculateWeights();
                     let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
                     sortedIdx.forEach((idx, i) => {{ initialRanks[idx] = i + 1; }});
-                    // 순위 변경에 따른 Pair 재정렬
                     for (let k = pairIdx; k < pairs.length; k++) {{
                         let p = pairs[k];
                         if (initialRanks[p.r] > initialRanks[p.c]) {{
