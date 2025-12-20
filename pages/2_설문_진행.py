@@ -244,7 +244,7 @@ else:
             sortedIdx.forEach((idx, i) => currentRanks[idx] = i + 1);
 
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
-                                  .sort((a,b) => a.org - b.org);
+                                    .sort((a,b) => a.org - b.org);
 
             // 첫 질문 보호 로직
             if (pairIdx === 0) {{
@@ -263,9 +263,18 @@ else:
             fixedOrder.forEach(item => {{
                 const cur = currentRanks[item.idx];
                 let isFlipped = false;
+                
+                // [수정] 나보다 랭킹이 낮았는데 높아진 놈(k)이 있거나, 나보다 높았는데 낮아진 놈(k)이 있으면 나도 역전된 것임
                 for(let k=0; k<items.length; k++) {{
+                    if (item.idx === k) continue;
+
+                    // Case 1: 내가 원래 더 높았는데(Rank숫자 작음), 지금은 더 낮아짐(Rank숫자 큼)
                     if(initialRanks[item.idx] < initialRanks[k] && currentRanks[item.idx] > currentRanks[k]) isFlipped = true;
+                    
+                    // Case 2: 내가 원래 더 낮았는데(Rank숫자 큼), 지금은 더 높아짐(Rank숫자 작음) -> 이 경우도 역전의 당사자임
+                    if(initialRanks[item.idx] > initialRanks[k] && currentRanks[item.idx] < currentRanks[k]) isFlipped = true;
                 }}
+                
                 if(isFlipped) hasFlip = true;
                 
                 grid.innerHTML += `<div class="board-item" style="border-color:${{isFlipped?'#fa5252':'#dee2e6'}}">
