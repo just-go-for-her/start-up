@@ -93,7 +93,7 @@ else:
         .btn {{ width: 100%; padding: 14px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1em; font-weight: bold; cursor: pointer; }}
         .btn-secondary {{ background: #adb5bd; }}
         .btn-danger {{ background: #ffc9c9; color: #e03131; }}
-        .btn-hidden {{ visibility: hidden; }}
+        .btn-hidden {{ display: none; }} 
 
         .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:9999; }}
         .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }}
@@ -134,10 +134,10 @@ else:
                 <div id="val-display" style="font-weight:bold; color:#343a40; font-size:1.4em;">동등함</div>
             </div>
             
-            <div class="button-group">
-                <button class="btn btn-secondary" onclick="goBack()" id="back-btn">⬅ 이전</button>
-                <button class="btn btn-danger" onclick="resetTask()">🔄 순위 재설정</button>
-                <button class="btn" onclick="checkLogic()" id="next-btn">다음 ➡</button>
+            <div class="button-group" id="button-container">
+                <button class="btn btn-secondary" onclick="goBack()" id="btn-prev">⬅ 이전</button>
+                <button class="btn btn-danger" onclick="resetTask()" id="btn-reset">🔄 순위 바꾸기</button>
+                <button class="btn" onclick="checkLogic()" id="btn-next">다음 ➡</button>
             </div>
         </div>
 
@@ -153,7 +153,7 @@ else:
         <div class="modal-box">
             <h3 style="color:#fa5252; margin-top:0;">⚠️ 순위 역전 감지</h3>
             <p style="font-size:0.95em; color:#495057; line-height:1.7; margin-bottom:25px;">
-                현재 응답을 적용하면 기존에 설정한 순서가 뒤바뀌게 됩니다.<br><b>변경된 의사를 인정</b>하시겠습니까?
+                현재 응답은 기존에 설정한 순위(더 중요한 항목)보다<br><b>점수를 더 낮게</b> 부여하고 있습니다.<br>(동등한 점수는 허용됩니다)
             </p>
             <div style="display:grid; gap:12px;">
                 <button class="btn" onclick="closeModal('flip', 'resurvey')" style="background:#228be6;">👈 응답 수정 (기존 순위 유지)</button>
@@ -184,8 +184,6 @@ else:
         let currentTaskIdx = 0, items = [], pairs = [], matrix = [], pairIdx = 0, initialRanks = [];
         let allAnswers = {{}};
         let recommendedWeight = 1;
-
-        // RI 지수 (n=1~10)
         const RI_TABLE = [0, 0, 0, 0.58, 0.90, 1.12, 1.24, 1.32, 1.41, 1.45, 1.49];
 
         function loadTask() {{
@@ -234,7 +232,16 @@ else:
             document.getElementById('hint-a').innerText = initialRanks[p.r];
             document.getElementById('hint-b').innerText = initialRanks[p.c];
             document.getElementById('slider').value = 0;
-            document.getElementById('back-btn').style.visibility = (pairIdx === 0) ? 'hidden' : 'visible';
+            
+            // [수정] 버튼 표시 로직: 첫 질문일 때만 '순위 바꾸기'가 보임 (이전 버튼 숨김)
+            if (pairIdx === 0) {{
+                document.getElementById('btn-prev').style.display = 'none';
+                document.getElementById('btn-reset').style.display = 'block';
+            }} else {{
+                document.getElementById('btn-prev').style.display = 'block';
+                document.getElementById('btn-reset').style.display = 'none';
+            }}
+
             document.getElementById('live-board').style.display = 'block';
             updateUI();
         }}
@@ -244,7 +251,6 @@ else:
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
 
-            // [조작 실수 차단]
             if (val > 0) {{
                 alert(`안내: [${{p.a}}] 항목이 상위 순위입니다.\\n왼쪽 방향으로만 가중치를 선택해 주세요.`);
                 slider.value = 0; val = 0;
@@ -265,12 +271,14 @@ else:
             const pill = document.getElementById('status-pill');
             
             let weights = calculateWeights();
+            
+            // 순위 표시용 (가중치 기준 정렬)
             let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
             let currentRanks = new Array(items.length);
             sortedIdx.forEach((idx, i) => currentRanks[idx] = i + 1);
 
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
-                                  .sort((a,b) => a.org - b.org);
+                                    .sort((a,b) => a.org - b.org);
 
             if (pairIdx === 0) {{
                 pill.innerText = "✅ 논리 일치"; pill.style.background = "#ebfbee"; pill.style.color = "#2f9e44";
@@ -285,13 +293,23 @@ else:
             }}
 
             let hasFlip = false;
+            // 미세한 부동소수점 오차 보정용 epsilon
+            const EPSILON = 0.00001;
+
             fixedOrder.forEach(item => {{
-                const cur = currentRanks[item.idx];
+                // 실제 플립 여부는 가중치 값을 직접 비교 (동일 가중치는 허용)
                 let isFlipped = false;
                 for(let k=0; k<items.length; k++) {{
-                    if(initialRanks[item.idx] < initialRanks[k] && currentRanks[item.idx] > currentRanks[k]) isFlipped = true;
+                    // 기존: item이 k보다 상위(숫자가 작음)
+                    // 현재: item의 가중치가 k의 가중치보다 작으면 역전 (동일하면 역전 아님!)
+                    if(initialRanks[item.idx] < initialRanks[k]) {{
+                        if(weights[item.idx] < weights[k] - EPSILON) isFlipped = true;
+                    }}
                 }}
                 if(isFlipped) hasFlip = true;
+                
+                // 보드 표시용 순위
+                const cur = currentRanks[item.idx];
                 
                 grid.innerHTML += `<div class="board-item" style="border-color:${{isFlipped?'#fa5252':'#dee2e6'}}">
                     <span class="item-name">${{item.name}}</span>
@@ -307,7 +325,6 @@ else:
             }}
         }}
 
-        // 가중치 계산 (현재 슬라이더 값 임시 적용 가능)
         function calculateWeights(tempVal = null) {{
             const n = items.length; 
             let tempMatrix = matrix.map(row => [...row]);
@@ -321,7 +338,6 @@ else:
             return weights.map(v => v / sum);
         }}
 
-        // [New] CR 계산 함수
         function getCR(currentVal) {{
             const n = items.length;
             if(n <= 2) return 0;
@@ -341,7 +357,6 @@ else:
             return ci / RI_TABLE[n];
         }}
 
-        // [New] 추천값(기하평균) 계산
         function getRecommendedWeight() {{
             const n = items.length; const p = pairs[pairIdx];
             let indirectVals = [];
@@ -352,7 +367,7 @@ else:
             }}
             if(indirectVals.length === 0) return 1;
             let geoMean = Math.exp(indirectVals.reduce((acc, v) => acc + Math.log(v), 0) / indirectVals.length);
-            if(geoMean < 1) return 2; // 순위 보호 (최소 2배)
+            if(geoMean < 1) return 2; 
             return Math.round(geoMean);
         }}
 
@@ -360,22 +375,23 @@ else:
             if (pairIdx === 0) {{ saveAndNext(); return; }}
             const sliderVal = parseInt(document.getElementById('slider').value);
             
-            // 1. 순위 역전 체크 (Flip Check)
+            // 1. 순위 역전 체크 (Flip Check) - [수정] 동일 배율 허용 로직
             let weights = calculateWeights(sliderVal);
-            let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
-            let currentRanks = new Array(items.length);
-            sortedIdx.forEach((idx, i) => currentRanks[idx] = i + 1);
+            const EPSILON = 0.00001; // 부동소수점 오차 허용
 
             let flipped = false;
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
-                    if(initialRanks[i] < initialRanks[j] && currentRanks[i] > currentRanks[j]) flipped = true;
+                    // i가 j보다 상위 순위(Rank 숫자 작음)여야 하는데
+                    if(initialRanks[i] < initialRanks[j]) {{
+                        // 가중치는 i가 j보다 확실히 작아지면 문제 (같거나 크면 OK)
+                        if(weights[i] < weights[j] - EPSILON) flipped = true;
+                    }}
                 }}
             }}
             if (flipped) {{ document.getElementById('modal-flip').style.display = 'flex'; return; }}
 
-            // 2. CR 체크 (CR > 0.1 이면 추천 모달)
-            // *단, 데이터가 조금 쌓인 시점(3번째 질문 이후 등)부터 체크하는 것이 좋음
+            // 2. CR 체크
             if(pairIdx >= 2) {{
                 let cr = getCR(sliderVal);
                 if(cr > 0.1) {{
