@@ -77,7 +77,19 @@ else:
         .status-pill {{ padding: 4px 12px; border-radius: 20px; font-size: 0.82em; font-weight: bold; }}
         
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
-        .board-item {{ min-width: 155px; background: white; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #dee2e6; flex: 1; display: flex; flex-direction: column; gap: 8px; }}
+        /* 테두리 스타일 기본값 설정 */
+        .board-item {{ 
+            min-width: 155px; background: white; padding: 12px; border-radius: 12px; 
+            text-align: center; border: 1px solid #dee2e6; 
+            flex: 1; display: flex; flex-direction: column; gap: 8px; 
+            transition: all 0.3s ease;
+        }}
+        
+        /* 역전 발생 시 적용할 클래스 */
+        .flipped-item {{
+            border: 2px solid #fa5252 !important;
+            background-color: #fff5f5 !important;
+        }}
         
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
         .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: #666; padding: 0 4px; }}
@@ -89,15 +101,12 @@ else:
         input[type=range] {{ -webkit-appearance: none; width: 100%; height: 12px; background: #dee2e6; border-radius: 6px; outline: none; margin: 35px 0; }}
         input[type=range]::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #228be6; border: 4px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2); position: relative; z-index: 5; }}
 
-        .button-group {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
         .btn {{ width: 100%; padding: 15px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1.1em; font-weight: bold; cursor: pointer; }}
         .btn-secondary {{ background: #adb5bd; }}
-        .btn-hidden {{ visibility: hidden; }}
-        
-        /* 버튼 배치 조정용 */
         .btn-reset {{ background: #ffc9c9; color: #e03131; }}
-        .split-btn-group {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }}
+        
         .two-btn-group {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
+        .split-btn-group {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }}
 
         .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999; }}
         .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; }}
@@ -238,21 +247,19 @@ else:
             document.getElementById('hint-b').innerText = initialRanks[p.c];
             document.getElementById('slider').value = 0;
             
-            // 버튼 동적 렌더링 (HTML 재작성)
             const btnArea = document.getElementById('btn-area');
             if (pairIdx === 0) {{
-                // 첫 질문: [순위 바꾸기] [다음]
                 btnArea.innerHTML = `
                 <div class="two-btn-group">
                     <button class="btn btn-reset" onclick="resetTask()">🔄 순위 바꾸기</button>
                     <button class="btn" onclick="checkLogic()">다음 ➡</button>
                 </div>`;
             }} else {{
-                // 이후: [이전] [빈공간] [다음] 형태 대신 3칸 그리드 사용
                 btnArea.innerHTML = `
                 <div class="split-btn-group">
                     <button class="btn btn-secondary" onclick="goBack()">⬅ 이전</button>
-                    <div style="width:100%"></div> <button class="btn" onclick="checkLogic()">다음 ➡</button>
+                    <div style="width:100%"></div>
+                    <button class="btn" onclick="checkLogic()">다음 ➡</button>
                 </div>`;
             }}
 
@@ -287,19 +294,34 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // [NEW] 공동 순위 처리 로직 (가중치가 같으면 순위도 같게)
+            // [계산] 현재 가중치에 따른 순위 (동점자는 같은 등수로 처리)
             let sortedWeights = [...weights].sort((a,b) => b-a);
-            let rankMap = {{}}; // weight -> rank
+            let rankMap = {{}}; // "0.123456" -> 1
             let currentRank = 1;
             sortedWeights.forEach((w, i) => {{
                 if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{
-                    // 이전과 같으면 랭크 유지
+                    // 이전 점수와 같으면 등수 유지
                 }} else {{
                     currentRank = i + 1;
                 }}
-                // key는 문자열로 변환하여 저장
                 rankMap[w.toFixed(6)] = currentRank;
             }});
+
+            // [판단] 역전된 항목들 찾기 (쌍방 체크)
+            let flippedSet = new Set();
+            for(let i=0; i<items.length; i++) {{
+                for(let j=i+1; j<items.length; j++) {{
+                    let u = i, v = j;
+                    // Case 1: u가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
+                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
+                        flippedSet.add(u); flippedSet.add(v);
+                    }}
+                    // Case 2: v가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
+                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
+                        flippedSet.add(u); flippedSet.add(v);
+                    }}
+                }}
+            }}
 
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
@@ -316,35 +338,22 @@ else:
                 return;
             }}
 
-            // [NEW] 역전된 항목들(Set) 찾기
-            let flippedSet = new Set();
-            for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(i === j) continue;
-                    // 내가 j보다 원래 순위가 높았는데(숫자 작음), 가중치가 역전된 경우
-                    if(initialRanks[i] < initialRanks[j]) {{
-                        // 가중치는 커야 정상. 확실히 작아지면 역전.
-                        if(weights[i] < weights[j] - EPSILON) {{
-                            flippedSet.add(i);
-                            flippedSet.add(j);
-                        }}
-                    }}
-                }}
-            }}
-
             let hasFlip = (flippedSet.size > 0);
 
             fixedOrder.forEach(item => {{
-                // 실제 가중치 기반 현재 순위
                 const myW = weights[item.idx].toFixed(6);
                 const curRank = rankMap[myW];
                 
                 let isFlipped = flippedSet.has(item.idx);
                 
-                grid.innerHTML += `<div class="board-item" style="border-color:${{isFlipped?'#fa5252':'#dee2e6'}}">
+                // CSS 클래스를 이용하여 붉은 테두리 적용
+                let itemClass = "board-item" + (isFlipped ? " flipped-item" : "");
+                let rankColorClass = isFlipped ? "error-color" : "match-color";
+
+                grid.innerHTML += `<div class="${{itemClass}}">
                     <span class="item-name">${{item.name}}</span>
                     <div class="rank-row"><span>기존 순위:</span><span class="rank-val">${{item.org}}위</span></div>
-                    <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{isFlipped?'error-color':'match-color'}}">${{curRank}}위</span></div>
+                    <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{rankColorClass}}">${{curRank}}위</span></div>
                 </div>`;
             }});
 
@@ -408,13 +417,14 @@ else:
             const EPSILON = 0.00001;
 
             let flippedPairs = [];
-            // [NEW] 역전 로직 동일하게 적용
             for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(initialRanks[i] < initialRanks[j]) {{
-                        if(weights[i] < weights[j] - EPSILON) {{
-                            flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
-                        }}
+                for(let j=i+1; j<items.length; j++) {{
+                    let u = i, v = j;
+                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
+                        flippedPairs.push(`${{items[u]}} (설정: ${{initialRanks[u]}}위) ↔ ${{items[v]}} (설정: ${{initialRanks[v]}}위)`);
+                    }}
+                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
+                        flippedPairs.push(`${{items[v]}} (설정: ${{initialRanks[v]}}위) ↔ ${{items[u]}} (설정: ${{initialRanks[u]}}위)`);
                     }}
                 }}
             }}
@@ -451,6 +461,7 @@ else:
                     let weights = calculateWeights();
                     let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
                     sortedIdx.forEach((idx, i) => {{ initialRanks[idx] = i + 1; }});
+                    // 순위 변경에 따른 Pair 재정렬
                     for (let k = pairIdx; k < pairs.length; k++) {{
                         let p = pairs[k];
                         if (initialRanks[p.r] > initialRanks[p.c]) {{
