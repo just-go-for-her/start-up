@@ -78,7 +78,6 @@ else:
         
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
         
-        /* 기본 아이템 스타일 */
         .board-item {{ 
             min-width: 155px; background: white; padding: 12px; border-radius: 12px; 
             text-align: center; border: 1px solid #dee2e6; 
@@ -267,6 +266,7 @@ else:
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
 
+            // [기존 코드 유지] 슬라이더 오른쪽 이동(역방향) 막기
             if (val > 0) {{
                 alert(`안내: 현재 [${{p.a}}] 항목의 순위가 더 높습니다. 설정하신 순서에 맞게 왼쪽 방향으로 응답해 주세요.`);
                 slider.value = 0; val = 0;
@@ -289,33 +289,27 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // [계산] 현재 가중치에 따른 순위 
             let sortedWeights = [...weights].sort((a,b) => b-a);
             let rankMap = {{}}; 
             let currentRank = 1;
             sortedWeights.forEach((w, i) => {{
-                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{
-                    // 동점자 랭크 유지
-                }} else {{
-                    currentRank = i + 1;
-                }}
+                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{}} else {{ currentRank = i + 1; }}
                 rankMap[w.toFixed(6)] = currentRank;
             }});
 
-            // [핵심] 역전된 항목들 찾기 (쌍방 체크)
+            // [핵심] 역전된 항목 찾기 (쌍방 체크)
             let flippedSet = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 내가 원래 더 높은데(숫자작음), 가중치가 역전(확실히 작음)
+                    // 내가 원래 상위(숫자 작음)인데 가중치가 하위(확실히 작음)
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedSet.add(i); flippedSet.add(j);
+                        flippedSet.add(i); flippedSet.add(j); // 둘 다 추가
                     }}
                 }}
             }}
 
             let hasFlip = (flippedSet.size > 0);
-
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
 
@@ -337,11 +331,11 @@ else:
                 
                 let isFlipped = flippedSet.has(item.idx);
                 
-                // [강제 스타일 주입] CSS 클래스 대신 style 속성 사용
-                let borderStyle = isFlipped ? "border: 3px solid #fa5252 !important; background-color: #ffe3e3;" : "border: 1px solid #dee2e6; background-color: white;";
+                // [강제 스타일] 붉은 테두리 3px + 배경색
+                let style = isFlipped ? "border: 3px solid #fa5252 !important; background-color: #ffe3e3;" : "border: 1px solid #dee2e6; background-color: white;";
                 let rankColorClass = isFlipped ? "error-color" : "match-color";
 
-                grid.innerHTML += `<div class="board-item" style="${{borderStyle}}">
+                grid.innerHTML += `<div class="board-item" style="${{style}}">
                     <span class="item-name">${{item.name}}</span>
                     <div class="rank-row"><span>기존 순위:</span><span class="rank-val">${{item.org}}위</span></div>
                     <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{rankColorClass}}">${{curRank}}위</span></div>
@@ -411,6 +405,7 @@ else:
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
+                    // 내가 원래 상위인데 가중치가 확실히 작으면 역전
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
                         flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
                     }}
@@ -420,7 +415,6 @@ else:
             if (flippedPairs.length > 0) {{ 
                 const listDiv = document.getElementById('flip-details');
                 listDiv.innerHTML = "";
-                // 중복 텍스트 제거 (A<->B, B<->A는 어차피 메시지가 다르거나 하나만 뜰 수 있음)
                 [...new Set(flippedPairs)].forEach(txt => {{
                     listDiv.innerHTML += `<div class="flip-item">❌ ${{(txt)}}</div>`;
                 }});
