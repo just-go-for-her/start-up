@@ -88,8 +88,10 @@ else:
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
         .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: #666; padding: 0 4px; }}
         .rank-val {{ font-weight: bold; color: #444; }}
-        .error-color {{ color: #fa5252 !important; text-decoration: underline; font-weight: 800; }}
-        .match-color {{ color: #228be6; }}
+        
+        /* 텍스트 색상 클래스 */
+        .error-text {{ color: #fa5252 !important; font-weight: 800; }}
+        .match-text {{ color: #228be6; }}
 
         .card {{ background: #fff; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px; border: 1px solid #e9ecef; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }}
         input[type=range] {{ -webkit-appearance: none; width: 100%; height: 12px; background: #dee2e6; border-radius: 6px; outline: none; margin: 35px 0; }}
@@ -104,9 +106,6 @@ else:
 
         .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999; }}
         .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; }}
-        
-        .cr-info {{ background: #fff9db; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; font-size: 0.9em; border: 1px solid #ffe066; }}
-        .rec-val {{ color: #228be6; font-weight: bold; font-size: 1.1em; }}
         
         .flip-list {{ text-align: left; background: #fff5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffc9c9; font-size: 0.9em; color: #c92a2a; }}
         .flip-item {{ margin-bottom: 4px; font-weight: bold; }}
@@ -170,29 +169,10 @@ else:
         </div>
     </div>
 
-    <div id="modal-cr" class="modal">
-        <div class="modal-box">
-            <h3 style="color:#fab005; margin-top:0;">💡 배율 일관성 확인 (CR > 0.1)</h3>
-            <p style="font-size:0.95em; color:#495057; margin-bottom:15px;">
-                순위는 맞지만, <b>수학적인 배율 관계</b>가 다소 어긋납니다.<br>더 정확한 분석을 위해 <b>추천값</b>으로 조정하시겠습니까?
-            </p>
-            <div class="cr-info">
-                <div>🧠 <b>AI 추천값:</b> <span id="rec-text" class="rec-val"></span></div>
-                <div style="color:#868e96; font-size:0.85em; margin-top:5px;">(기존 응답 패턴 기반 최적값)</div>
-            </div>
-            <div style="display:grid; gap:12px;">
-                <button class="btn" onclick="closeModal('cr', 'use_rec')" style="background:#228be6;">👌 추천값 적용하기</button>
-                <button class="btn" onclick="closeModal('cr', 'keep')" style="background:#adb5bd;">내 응답 유지 (그대로 진행)</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         const tasks = {js_tasks};
         let currentTaskIdx = 0, items = [], pairs = [], matrix = [], pairIdx = 0, initialRanks = [];
         let allAnswers = {{}};
-        let recommendedWeight = 1;
-        const RI_TABLE = [0, 0, 0, 0.58, 0.90, 1.12, 1.24, 1.32, 1.41, 1.45, 1.49];
 
         function loadTask() {{
             if (currentTaskIdx >= tasks.length) {{ finishAll(); return; }}
@@ -287,34 +267,30 @@ else:
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // 1. 역전된 항목 찾기
-            let flippedIndices = new Set();
+            let sortedWeights = [...weights].sort((a,b) => b-a);
+            let rankMap = {{}}; 
+            let currentRank = 1;
+            sortedWeights.forEach((w, i) => {{
+                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{ }} else {{ currentRank = i + 1; }}
+                rankMap[w.toFixed(6)] = currentRank;
+            }});
+
+            // [핵심] 역전된 항목 찾기 (쌍방 체크)
+            let flippedSet = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 원래 i가 상위(작은 숫자)인데 점수는 j가 더 높음 -> 역전
-                    // 나(i)는 피해자, 너(j)는 수혜자 -> 둘 다 추가
+                    // 조건: 내가(i) 원래 상위(rank숫자 작음)인데 가중치가 상대(j)보다 확실히 작음(역전)
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedIndices.add(i); 
-                        flippedIndices.add(j);
+                        flippedSet.add(i); // 나(피해자: 2위였는데 3위됨)
+                        flippedSet.add(j); // 너(수혜자: 3위였는데 2위됨)
                     }}
                 }}
             }}
 
-            // 2. 표시 순서 (기존 순위대로)
+            let hasFlip = (flippedSet.size > 0);
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
-
-            // 3. 현재 가중치 순위 계산 (보여주기용)
-            let sortedIdx = weights.map((w, i) => ({{w, i}})).sort((a, b) => b.w - a.w);
-            let rankMap = {{}};
-            let currentRank = 1;
-            sortedIdx.forEach((obj, idx) => {{
-                if (idx > 0 && Math.abs(obj.w - sortedIdx[idx-1].w) < EPSILON) {{}} else {{ currentRank = idx + 1; }}
-                rankMap[obj.i] = currentRank;
-            }});
-
-            let hasFlip = (flippedIndices.size > 0);
 
             if (pairIdx === 0) {{
                 pill.innerText = "✅ 순위 설정 완료"; pill.style.background = "#ebfbee"; pill.style.color = "#2f9e44";
@@ -331,23 +307,25 @@ else:
                 }}
 
                 fixedOrder.forEach(item => {{
-                    let isFlipped = flippedIndices.has(item.idx);
+                    let isFlipped = flippedSet.has(item.idx);
                     let curRank = rankMap[item.idx];
                     grid.innerHTML += createCard(item.name, item.org, curRank, isFlipped);
                 }});
             }}
         }}
 
+        // [HTML 생성 함수 분리] -> 스타일 강제 적용
         function createCard(name, oldRank, newRank, isFlipped) {{
-            let border = isFlipped ? "3px solid #fa5252" : "1px solid #dee2e6";
-            let bg = isFlipped ? "#fff5f5" : "white";
-            let color = isFlipped ? "#fa5252" : "#228be6";
+            // isFlipped가 true면 무조건 붉은 테두리와 배경을 인라인 스타일로 적용
+            let borderStyle = isFlipped ? "3px solid #fa5252 !important" : "1px solid #dee2e6";
+            let bgStyle = isFlipped ? "#fff5f5 !important" : "white";
+            let textColorClass = isFlipped ? "error-text" : "match-text";
             
             return `
-            <div class="board-item" style="border: ${{border}} !important; background-color: ${{bg}} !important;">
+            <div class="board-item" style="border: ${{borderStyle}}; background-color: ${{bgStyle}};">
                 <span class="item-name">${{name}}</span>
                 <div class="rank-row"><span>기존:</span><span class="rank-val">${{oldRank}}위</span></div>
-                <div class="rank-row"><span>현재:</span><span class="rank-val" style="color:${{color}}; font-weight:bold;">${{newRank}}위</span></div>
+                <div class="rank-row"><span>현재:</span><span class="rank-val ${{textColorClass}}">${{newRank}}위</span></div>
             </div>`;
         }}
 
@@ -369,43 +347,6 @@ else:
             return weights.map(v => v / sum);
         }}
 
-        function getCR(currentVal) {{
-            const n = items.length;
-            if(n <= 2) return 0;
-            let tempMatrix = matrix.map(row => [...row]);
-            let p = pairs[pairIdx];
-            
-            let w_abs = Math.abs(currentVal) + 1;
-            let w_final = (currentVal <= 0) ? w_abs : (1 / w_abs);
-
-            tempMatrix[p.r][p.c] = w_final; 
-            tempMatrix[p.c][p.r] = 1 / w_final;
-            
-            let weights = calculateWeights(currentVal);
-            let lambdaMax = 0;
-            for(let i=0; i<n; i++) {{
-                let sumCol = 0;
-                for(let j=0; j<n; j++) sumCol += (tempMatrix[j][i] || 1);
-                lambdaMax += sumCol * weights[i];
-            }}
-            let ci = (lambdaMax - n) / (n - 1);
-            return ci / RI_TABLE[n];
-        }}
-
-        function getRecommendedWeight() {{
-            const n = items.length; const p = pairs[pairIdx];
-            let indirectVals = [];
-            for(let k=0; k<n; k++) {{
-                if(k !== p.r && k !== p.c && matrix[p.r][k] !== 0 && matrix[k][p.c] !== 0) {{
-                    indirectVals.push(matrix[p.r][k] * matrix[k][p.c]);
-                }}
-            }}
-            if(indirectVals.length === 0) return 1;
-            let geoMean = Math.exp(indirectVals.reduce((acc, v) => acc + Math.log(v), 0) / indirectVals.length);
-            if(geoMean < 1) return 2; 
-            return Math.round(geoMean);
-        }}
-
         function checkLogic() {{
             if (pairIdx === 0) {{ saveAndNext(); return; }}
             const sliderVal = parseInt(document.getElementById('slider').value);
@@ -416,6 +357,7 @@ else:
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
+                    // 역전 감지 (모달용 텍스트)
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
                         flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
                     }}
@@ -432,18 +374,7 @@ else:
                 return; 
             }}
 
-            if(pairIdx >= 2) {{
-                let cr = getCR(sliderVal);
-                if(cr > 0.1) {{
-                    let recW = getRecommendedWeight();
-                    recommendedWeight = recW;
-                    let txt = (recW >= 1) ? `왼쪽(A) ${{-1 * recW}}배` : "동등(1:1)";
-                    if(recW > 1) txt = `왼쪽(A) ${{recW}}배`;
-                    document.getElementById('rec-text').innerText = txt;
-                    document.getElementById('modal-cr').style.display = 'flex';
-                    return;
-                }}
-            }}
+            // CR 체크 로직은 삭제됨 (바로 저장 후 이동)
             saveAndNext();
         }}
 
@@ -464,16 +395,6 @@ else:
                     saveAndNext();
                 }} else {{
                     document.getElementById('slider').value = 0; updateUI();
-                }}
-            }} else if(type === 'cr') {{
-                if(action === 'use_rec') {{
-                    let newVal = -1 * (recommendedWeight - 1); 
-                    if(recommendedWeight === 1) newVal = 0;
-                    if(newVal < -4) newVal = -4; 
-                    document.getElementById('slider').value = newVal;
-                    updateUI(); 
-                }} else {{
-                    saveAndNext();
                 }}
             }}
         }}
