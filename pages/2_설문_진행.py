@@ -42,14 +42,14 @@ if not is_respondent:
         st.warning("⚠️ [1번 페이지]에서 구조를 먼저 확정하세요."); st.stop()
     project_key = st.text_input("프로젝트 비밀번호(Key) 설정", type="password")
     if st.button("🔗 공유 링크 생성하기", type="primary", use_container_width=True):
-        if not project_key: st.error("비밀번호 설정이 필요합니다.")
+        if not project_key: st.error("비밀번호 설정 필요")
         else:
             full_structure = {**survey_data, "secret_key": project_key}
             survey_id = uuid.uuid4().hex[:8]
             with open(os.path.join(CONFIG_DIR, f"{survey_id}.json"), "w", encoding="utf-8") as f:
                 json.dump(full_structure, f, ensure_ascii=False, indent=2)
             st.code(f"{FULL_URL}?id={survey_id}")
-            st.success("공유 링크가 생성되었습니다.")
+            st.success("링크 생성 완료!")
 
 else:
     st.title(f"📝 {survey_data['goal']}")
@@ -69,7 +69,7 @@ else:
     <meta charset="UTF-8">
     <style>
         body {{ font-family: "Pretendard", sans-serif; padding: 10px; background: #f8f9fa; }}
-        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+        .container {{ max-width: 720px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
         .step {{ display: none; }} .active {{ display: block; }}
         
         .ranking-board {{ background: #f1f3f5; padding: 18px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #dee2e6; }}
@@ -77,16 +77,10 @@ else:
         .status-pill {{ padding: 4px 12px; border-radius: 20px; font-size: 0.82em; font-weight: bold; }}
         
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
-        
-        .board-item {{ 
-            min-width: 155px; background: white; padding: 12px; border-radius: 12px; 
-            text-align: center; border: 1px solid #dee2e6; 
-            flex: 1; display: flex; flex-direction: column; gap: 8px; 
-            transition: all 0.2s ease;
-        }}
+        .board-item {{ min-width: 155px; background: white; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #dee2e6; flex: 1; display: flex; flex-direction: column; gap: 8px; }}
         
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
-        .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: #666; padding: 0 4px; }}
+        .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.88em; color: #666; padding: 0 4px; }}
         .rank-val {{ font-weight: bold; color: #444; }}
         .error-color {{ color: #fa5252 !important; text-decoration: underline; font-weight: 800; }}
         .match-color {{ color: #228be6; }}
@@ -95,21 +89,17 @@ else:
         input[type=range] {{ -webkit-appearance: none; width: 100%; height: 12px; background: #dee2e6; border-radius: 6px; outline: none; margin: 35px 0; }}
         input[type=range]::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #228be6; border: 4px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2); position: relative; z-index: 5; }}
 
-        .btn {{ width: 100%; padding: 15px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1.1em; font-weight: bold; cursor: pointer; }}
+        .button-group {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px; }}
+        .btn {{ width: 100%; padding: 14px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1em; font-weight: bold; cursor: pointer; }}
         .btn-secondary {{ background: #adb5bd; }}
-        .btn-reset {{ background: #ffc9c9; color: #e03131; }}
-        
-        .two-btn-group {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
-        .split-btn-group {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }}
+        .btn-danger {{ background: #ffc9c9; color: #e03131; }}
+        .btn-hidden {{ display: none; }} 
 
-        .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999; }}
-        .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; }}
+        .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:9999; }}
+        .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }}
         
         .cr-info {{ background: #fff9db; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; font-size: 0.9em; border: 1px solid #ffe066; }}
         .rec-val {{ color: #228be6; font-weight: bold; font-size: 1.1em; }}
-        
-        .flip-list {{ text-align: left; background: #fff5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffc9c9; font-size: 0.9em; color: #c92a2a; }}
-        .flip-item {{ margin-bottom: 4px; font-weight: bold; }}
     </style>
     </head>
     <body>
@@ -118,7 +108,7 @@ else:
 
         <div id="live-board" class="ranking-board" style="display:none;">
             <div class="board-title">
-                <span>📊 실시간 순위 현황 (기본 순서 고정)</span>
+                <span>📊 실시간 순위 현황 (설정 순서 고정)</span>
                 <span id="status-pill" class="status-pill">체크 중</span>
             </div>
             <div id="board-grid" class="board-grid"></div>
@@ -138,13 +128,17 @@ else:
                     <span id="item-b" style="color:#fa5252;">B</span>
                 </div>
                 <div style="font-size:0.95em; color:#adb5bd; margin-bottom:10px;">
-                    (기존 순위: <span id="hint-a"></span>위) vs (기존 순위: <span id="hint-b"></span>위)
+                    (기존: <span id="hint-a"></span>위) vs (기존: <span id="hint-b"></span>위)
                 </div>
                 <input type="range" id="slider" min="-4" max="4" value="0" step="1" oninput="updateUI()">
                 <div id="val-display" style="font-weight:bold; color:#343a40; font-size:1.4em;">동등함</div>
             </div>
             
-            <div id="btn-area"></div>
+            <div class="button-group" id="button-container">
+                <button class="btn btn-secondary" onclick="goBack()" id="btn-prev">⬅ 이전</button>
+                <button class="btn btn-danger" onclick="resetTask()" id="btn-reset">🔄 순위 바꾸기</button>
+                <button class="btn" onclick="checkLogic()" id="btn-next">다음 ➡</button>
+            </div>
         </div>
 
         <div id="step-finish" class="step">
@@ -158,11 +152,9 @@ else:
     <div id="modal-flip" class="modal">
         <div class="modal-box">
             <h3 style="color:#fa5252; margin-top:0;">⚠️ 순위 역전 감지</h3>
-            <p style="font-size:0.95em; color:#495057; line-height:1.7; margin-bottom:15px;">
-                설정하신 순위와 달리, 아래 항목들의 점수가 뒤집혔습니다.<br>
-                (동점은 허용되지만, <b>확실히 낮아진 경우</b>입니다)
+            <p style="font-size:0.95em; color:#495057; line-height:1.7; margin-bottom:25px;">
+                현재 응답은 기존에 설정한 순위(더 중요한 항목)보다<br><b>점수를 더 낮게</b> 부여하고 있습니다.<br>(동등한 점수는 허용됩니다)
             </p>
-            <div id="flip-details" class="flip-list"></div>
             <div style="display:grid; gap:12px;">
                 <button class="btn" onclick="closeModal('flip', 'resurvey')" style="background:#228be6;">👈 응답 수정 (기존 순위 유지)</button>
                 <button class="btn" onclick="closeModal('flip', 'updaterank')" style="background:#868e96;">✅ 변경 인정 (설정값 업데이트)</button>
@@ -241,20 +233,13 @@ else:
             document.getElementById('hint-b').innerText = initialRanks[p.c];
             document.getElementById('slider').value = 0;
             
-            const btnArea = document.getElementById('btn-area');
+            // [수정] 버튼 표시 로직: 첫 질문일 때만 '순위 바꾸기'가 보임 (이전 버튼 숨김)
             if (pairIdx === 0) {{
-                btnArea.innerHTML = `
-                <div class="two-btn-group">
-                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 바꾸기</button>
-                    <button class="btn" onclick="checkLogic()">다음 ➡</button>
-                </div>`;
+                document.getElementById('btn-prev').style.display = 'none';
+                document.getElementById('btn-reset').style.display = 'block';
             }} else {{
-                btnArea.innerHTML = `
-                <div class="split-btn-group">
-                    <button class="btn btn-secondary" onclick="goBack()">⬅ 이전</button>
-                    <div style="width:100%"></div>
-                    <button class="btn" onclick="checkLogic()">다음 ➡</button>
-                </div>`;
+                document.getElementById('btn-prev').style.display = 'block';
+                document.getElementById('btn-reset').style.display = 'none';
             }}
 
             document.getElementById('live-board').style.display = 'block';
@@ -266,16 +251,18 @@ else:
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
 
+            if (val > 0) {{
+                alert(`안내: [${{p.a}}] 항목이 상위 순위입니다.\\n왼쪽 방향으로만 가중치를 선택해 주세요.`);
+                slider.value = 0; val = 0;
+            }}
+
             const disp = document.getElementById('val-display');
             let perc = (val + 4) * 12.5;
             if(val < 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 ${{perc}}%, #228be6 ${{perc}}%, #228be6 50%, #dee2e6 50%, #dee2e6 100%)`;
-            else if(val > 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 50%, #fa5252 50%, #fa5252 ${{perc}}%, #dee2e6 ${{perc}}%, #dee2e6 100%)`;
             else slider.style.background = '#dee2e6';
 
             if(val == 0) disp.innerText = "동등함 (1:1)";
-            else if(val < 0) disp.innerText = `${{p.a}} ${{Math.abs(val)+1}}배 중요`;
-            else disp.innerText = `${{p.b}} ${{Math.abs(val)+1}}배 중요`; 
-            
+            else disp.innerText = `${{p.a}} ${{Math.abs(val)+1}}배 중요`;
             updateBoard();
         }}
 
@@ -284,30 +271,12 @@ else:
             const pill = document.getElementById('status-pill');
             
             let weights = calculateWeights();
-            const EPSILON = 0.00001;
+            
+            // 순위 표시용 (가중치 기준 정렬)
+            let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
+            let currentRanks = new Array(items.length);
+            sortedIdx.forEach((idx, i) => currentRanks[idx] = i + 1);
 
-            let sortedWeights = [...weights].sort((a,b) => b-a);
-            let rankMap = {{}}; 
-            let currentRank = 1;
-            sortedWeights.forEach((w, i) => {{
-                if (i > 0 && Math.abs(w - sortedWeights[i-1]) < EPSILON) {{ }} else {{ currentRank = i + 1; }}
-                rankMap[w.toFixed(6)] = currentRank;
-            }});
-
-            // [쌍방 체크] N x N 전체 루프로 확실하게 잡아냄
-            let flippedSet = new Set();
-            for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(i === j) continue;
-                    // 조건: 원래 순위가 상위(작은숫자)인데, 가중치 점수가 확실히 낮음(역전)
-                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedSet.add(i); // 나(피해자)
-                        flippedSet.add(j); // 너(가해자/수혜자)
-                    }}
-                }}
-            }}
-
-            let hasFlip = (flippedSet.size > 0);
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
 
@@ -323,23 +292,29 @@ else:
                 return;
             }}
 
-            fixedOrder.forEach(item => {{
-                const myW = weights[item.idx].toFixed(6);
-                const curRank = rankMap[myW];
-                
-                let isFlipped = flippedSet.has(item.idx);
-                
-                // [강제 스타일] 인라인 스타일로 덮어쓰기 (CSS 우선순위 문제 해결)
-                let borderStyle = isFlipped 
-                    ? "border: 4px solid #fa5252 !important; background-color: #fff5f5 !important; box-shadow: 0 0 12px rgba(250, 82, 82, 0.4);" 
-                    : "border: 1px solid #dee2e6; background-color: white;";
-                
-                let rankColorClass = isFlipped ? "error-color" : "match-color";
+            let hasFlip = false;
+            // 미세한 부동소수점 오차 보정용 epsilon
+            const EPSILON = 0.00001;
 
-                grid.innerHTML += `<div class="board-item" style="${{borderStyle}}">
+            fixedOrder.forEach(item => {{
+                // 실제 플립 여부는 가중치 값을 직접 비교 (동일 가중치는 허용)
+                let isFlipped = false;
+                for(let k=0; k<items.length; k++) {{
+                    // 기존: item이 k보다 상위(숫자가 작음)
+                    // 현재: item의 가중치가 k의 가중치보다 작으면 역전 (동일하면 역전 아님!)
+                    if(initialRanks[item.idx] < initialRanks[k]) {{
+                        if(weights[item.idx] < weights[k] - EPSILON) isFlipped = true;
+                    }}
+                }}
+                if(isFlipped) hasFlip = true;
+                
+                // 보드 표시용 순위
+                const cur = currentRanks[item.idx];
+                
+                grid.innerHTML += `<div class="board-item" style="border-color:${{isFlipped?'#fa5252':'#dee2e6'}}">
                     <span class="item-name">${{item.name}}</span>
                     <div class="rank-row"><span>기존 순위:</span><span class="rank-val">${{item.org}}위</span></div>
-                    <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{rankColorClass}}">${{curRank}}위</span></div>
+                    <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{isFlipped?'error-color':'match-color'}}">${{cur}}위</span></div>
                 </div>`;
             }});
 
@@ -355,13 +330,8 @@ else:
             let tempMatrix = matrix.map(row => [...row]);
             let p = pairs[pairIdx];
             let val = tempVal !== null ? tempVal : parseInt(document.getElementById('slider').value);
-            
-            let w_abs = Math.abs(val) + 1;
-            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
-
-            tempMatrix[p.r][p.c] = w_final; 
-            tempMatrix[p.c][p.r] = 1 / w_final;
-            
+            let w = val === 0 ? 1 : (Math.abs(val)+1);
+            tempMatrix[p.r][p.c] = w; tempMatrix[p.c][p.r] = 1/w;
             for(let i=0; i<n; i++) {{ for(let j=0; j<n; j++) {{ if(tempMatrix[i][j] === 0) tempMatrix[i][j] = 1; }} }}
             let weights = tempMatrix.map(row => Math.pow(row.reduce((a, b) => a * b, 1), 1/n));
             let sum = weights.reduce((a, b) => a + b, 0);
@@ -373,12 +343,8 @@ else:
             if(n <= 2) return 0;
             let tempMatrix = matrix.map(row => [...row]);
             let p = pairs[pairIdx];
-            
-            let w_abs = Math.abs(currentVal) + 1;
-            let w_final = (currentVal <= 0) ? w_abs : (1 / w_abs);
-
-            tempMatrix[p.r][p.c] = w_final; 
-            tempMatrix[p.c][p.r] = 1 / w_final;
+            let w = currentVal === 0 ? 1 : (Math.abs(currentVal)+1);
+            tempMatrix[p.r][p.c] = w; tempMatrix[p.c][p.r] = 1/w;
             
             let weights = calculateWeights(currentVal);
             let lambdaMax = 0;
@@ -408,32 +374,24 @@ else:
         function checkLogic() {{
             if (pairIdx === 0) {{ saveAndNext(); return; }}
             const sliderVal = parseInt(document.getElementById('slider').value);
+            
+            // 1. 순위 역전 체크 (Flip Check) - [수정] 동일 배율 허용 로직
             let weights = calculateWeights(sliderVal);
-            const EPSILON = 0.00001;
+            const EPSILON = 0.00001; // 부동소수점 오차 허용
 
-            let flippedPairs = [];
+            let flipped = false;
             for(let i=0; i<items.length; i++) {{
-                for(let j=i+1; j<items.length; j++) {{
-                    let u = i, v = j;
-                    if(initialRanks[u] < initialRanks[v] && weights[u] < weights[v] - EPSILON) {{
-                        flippedPairs.push(`${{items[u]}} (설정: ${{initialRanks[u]}}위) ↔ ${{items[v]}} (설정: ${{initialRanks[v]}}위)`);
-                    }}
-                    if(initialRanks[v] < initialRanks[u] && weights[v] < weights[u] - EPSILON) {{
-                        flippedPairs.push(`${{items[v]}} (설정: ${{initialRanks[v]}}위) ↔ ${{items[u]}} (설정: ${{initialRanks[u]}}위)`);
+                for(let j=0; j<items.length; j++) {{
+                    // i가 j보다 상위 순위(Rank 숫자 작음)여야 하는데
+                    if(initialRanks[i] < initialRanks[j]) {{
+                        // 가중치는 i가 j보다 확실히 작아지면 문제 (같거나 크면 OK)
+                        if(weights[i] < weights[j] - EPSILON) flipped = true;
                     }}
                 }}
             }}
+            if (flipped) {{ document.getElementById('modal-flip').style.display = 'flex'; return; }}
 
-            if (flippedPairs.length > 0) {{ 
-                const listDiv = document.getElementById('flip-details');
-                listDiv.innerHTML = "";
-                [...new Set(flippedPairs)].forEach(txt => {{
-                    listDiv.innerHTML += `<div class="flip-item">❌ ${{(txt)}}</div>`;
-                }});
-                document.getElementById('modal-flip').style.display = 'flex'; 
-                return; 
-            }}
-
+            // 2. CR 체크
             if(pairIdx >= 2) {{
                 let cr = getCR(sliderVal);
                 if(cr > 0.1) {{
@@ -488,12 +446,10 @@ else:
 
         function saveAndNext() {{
             const val = parseInt(document.getElementById('slider').value);
-            let w_abs = Math.abs(val) + 1;
-            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
-
+            const w = val === 0 ? 1 : (Math.abs(val)+1);
             const p = pairs[pairIdx];
-            matrix[p.r][p.c] = w_final; matrix[p.c][p.r] = 1/w_final;
-            allAnswers[`[${{tasks[currentTaskIdx].name}}] ${{p.a}} vs ${{p.b}}`] = w_final.toFixed(2);
+            matrix[p.r][p.c] = w; matrix[p.c][p.r] = 1/w;
+            allAnswers[`[${{tasks[currentTaskIdx].name}}] ${{p.a}} vs ${{p.b}}`] = w.toFixed(2);
             pairIdx++;
             if (pairIdx >= pairs.length) {{ currentTaskIdx++; loadTask(); }}
             else {{ renderPair(); }}
