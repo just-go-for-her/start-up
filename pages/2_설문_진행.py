@@ -83,7 +83,6 @@ else:
             text-align: center; border: 1px solid #dee2e6; 
             flex: 1; display: flex; flex-direction: column; gap: 8px; 
             transition: all 0.2s ease;
-            position: relative; /* z-index용 */
         }}
         
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
@@ -267,8 +266,6 @@ else:
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
 
-            // [자유 이동] 슬라이더 제한 Alert 제거됨
-
             const disp = document.getElementById('val-display');
             let perc = (val + 4) * 12.5;
             if(val < 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 ${{perc}}%, #228be6 ${{perc}}%, #228be6 50%, #dee2e6 50%, #dee2e6 100%)`;
@@ -297,15 +294,15 @@ else:
                 rankMap[w.toFixed(6)] = currentRank;
             }});
 
-            // [쌍방 체크] 역전된 모든 항목 수집
+            // [쌍방 체크] N x N 전체 루프로 확실하게 잡아냄
             let flippedSet = new Set();
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 내가 원래 상위(숫자 작음)인데 가중치가 하위(확실히 작음)
-                    // -> 나(i)는 피해자, 상대(j)는 수혜자. 둘 다 추가.
+                    // 조건: 원래 순위가 상위(작은숫자)인데, 가중치 점수가 확실히 낮음(역전)
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedSet.add(i); flippedSet.add(j);
+                        flippedSet.add(i); // 나(피해자)
+                        flippedSet.add(j); // 너(가해자/수혜자)
                     }}
                 }}
             }}
@@ -332,14 +329,14 @@ else:
                 
                 let isFlipped = flippedSet.has(item.idx);
                 
-                // [강제 스타일] 붉은 테두리 + 배경 + 그림자 추가
-                let style = isFlipped 
-                    ? "border: 3px solid #fa5252 !important; background-color: #fff5f5 !important; box-shadow: 0 0 10px rgba(250, 82, 82, 0.3);" 
+                // [강제 스타일] 인라인 스타일로 덮어쓰기 (CSS 우선순위 문제 해결)
+                let borderStyle = isFlipped 
+                    ? "border: 4px solid #fa5252 !important; background-color: #fff5f5 !important; box-shadow: 0 0 12px rgba(250, 82, 82, 0.4);" 
                     : "border: 1px solid #dee2e6; background-color: white;";
                 
                 let rankColorClass = isFlipped ? "error-color" : "match-color";
 
-                grid.innerHTML += `<div class="board-item" style="${{style}}">
+                grid.innerHTML += `<div class="board-item" style="${{borderStyle}}">
                     <span class="item-name">${{item.name}}</span>
                     <div class="rank-row"><span>기존 순위:</span><span class="rank-val">${{item.org}}위</span></div>
                     <div class="rank-row"><span>변동 순위:</span><span class="rank-val ${{rankColorClass}}">${{curRank}}위</span></div>
@@ -359,7 +356,6 @@ else:
             let p = pairs[pairIdx];
             let val = tempVal !== null ? tempVal : parseInt(document.getElementById('slider').value);
             
-            // [계산] 음수(왼쪽)는 A우세, 양수(오른쪽)는 B우세
             let w_abs = Math.abs(val) + 1;
             let w_final = (val <= 0) ? w_abs : (1 / w_abs);
 
@@ -492,7 +488,6 @@ else:
 
         function saveAndNext() {{
             const val = parseInt(document.getElementById('slider').value);
-            // 저장 로직도 음수/양수 방향성 고려
             let w_abs = Math.abs(val) + 1;
             let w_final = (val <= 0) ? w_abs : (1 / w_abs);
 
