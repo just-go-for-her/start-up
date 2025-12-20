@@ -1,400 +1,300 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import json
 import pandas as pd
 from datetime import datetime
 import os
-import uuid 
+import uuid
+import numpy as np
 
 # ==============================================================================
-# [설정] 본인의 실제 배포 주소 입력
+# [설정] URL
 # ==============================================================================
 FULL_URL = "https://ahp-platform-bbee45epwqjjy2zfpccz7p.streamlit.app/%EC%84%A4%EB%AC%B8_%EC%A7%84%ED%96%89"
-# ==============================================================================
-
 CONFIG_DIR = "survey_config"
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
 st.set_page_config(page_title="설문 진행", page_icon="📝", layout="wide")
 
+# ==============================================================================
+# [CSS 스타일링] - 붉은 테두리 및 카드 디자인
+# ==============================================================================
+st.markdown("""
+<style>
+    .rank-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        text-align: center;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .rank-card-red {
+        background-color: #fff5f5;
+        padding: 15px;
+        border-radius: 10px;
+        border: 3px solid #fa5252; /* 붉은 테두리 */
+        text-align: center;
+        box-shadow: 0 0 10px rgba(250, 82, 82, 0.4);
+        margin-bottom: 10px;
+    }
+    .rank-title { font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
+    .rank-info { font-size: 0.9em; color: #666; }
+    .rank-current { font-weight: bold; color: #228be6; font-size: 1.0em; }
+    .rank-current-red { font-weight: bold; color: #fa5252; font-size: 1.0em; }
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# [함수] AHP 계산 로직 (파이썬)
+# ==============================================================================
+def calculate_current_ranks(items, matrix):
+    """현재 매트릭스 기반 가중치 및 순위 계산"""
+    n = len(items)
+    # 기하평균법 사용 (실시간 계산에 빠름)
+    weights = []
+    for i in range(n):
+        row_prod = np.prod(matrix[i])
+        weights.append(row_prod ** (1/n))
+    
+    total_weight = sum(weights)
+    norm_weights = [w / total_weight for w in weights]
+    
+    # 가중치 내림차순으로 순위 매기기 (동점 처리 포함)
+    indexed_weights = sorted(enumerate(norm_weights), key=lambda x: x[1], reverse=True)
+    
+    rank_map = {}
+    current_rank = 1
+    for i in range(len(indexed_weights)):
+        idx, w = indexed_weights[i]
+        if i > 0 and abs(w - indexed_weights[i-1][1]) < 0.00001:
+            pass # 동점이면 랭크 유지
+        else:
+            current_rank = i + 1
+        rank_map[idx] = current_rank
+        
+    return rank_map, norm_weights
+
+# ==============================================================================
+# [메인 로직]
+# ==============================================================================
+
+# 1. URL 파라미터 및 설정 로드
 query_params = st.query_params
 raw_id = query_params.get("id", None)
-if isinstance(raw_id, list): survey_id = raw_id[0] if raw_id else None
-else: survey_id = raw_id
+survey_id = raw_id if raw_id else None
 
 survey_data = None
-
 if survey_id:
     config_path = os.path.join(CONFIG_DIR, f"{survey_id}.json")
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             survey_data = json.load(f)
-        is_respondent = True
     else:
-        st.error("유효하지 않은 링크입니다."); st.stop()
+        st.error("유효하지 않은 링크입니다.")
+        st.stop()
 else:
-    is_respondent = False
     survey_data = st.session_state.get("passed_structure", None)
 
-if not is_respondent:
-    st.title("📢 설문 배포 센터")
-    if not survey_data:
-        st.warning("⚠️ [1번 페이지]에서 구조를 먼저 확정하세요."); st.stop()
-    project_key = st.text_input("프로젝트 비밀번호(Key) 설정", type="password")
-    if st.button("🔗 공유 링크 생성하기", type="primary", use_container_width=True):
-        if not project_key: st.error("비밀번호 설정이 필요합니다.")
-        else:
-            full_structure = {**survey_data, "secret_key": project_key}
-            survey_id = uuid.uuid4().hex[:8]
-            with open(os.path.join(CONFIG_DIR, f"{survey_id}.json"), "w", encoding="utf-8") as f:
-                json.dump(full_structure, f, ensure_ascii=False, indent=2)
-            st.code(f"{FULL_URL}?id={survey_id}")
-            st.success("공유 링크가 생성되었습니다.")
+if not survey_data:
+    st.warning("설문 데이터를 불러올 수 없습니다.")
+    st.stop()
 
-else:
-    st.title(f"📝 {survey_data['goal']}")
+st.title(f"📝 {survey_data['goal']}")
+
+# 2. 데이터 준비 (Flatten Tasks)
+if 'tasks' not in st.session_state:
     tasks = []
     if len(survey_data["main_criteria"]) > 1:
-        tasks.append({"name": "📂 1. 평가 기준 중요도 비교", "items": survey_data["main_criteria"]})
+        tasks.append({"name": "평가 기준 중요도", "items": survey_data["main_criteria"]})
     for cat, items in survey_data["sub_criteria"].items():
         if len(items) > 1:
-            tasks.append({"name": f"📂 2. [{cat}] 세부 항목 평가", "items": items})
+            tasks.append({"name": f"[{cat}] 세부 항목", "items": items})
+    st.session_state['tasks'] = tasks
+    st.session_state['current_task_idx'] = 0
+    st.session_state['step'] = 'ranking' # ranking -> compare -> finish
+    st.session_state['answers'] = {}
 
-    js_tasks = json.dumps(tasks, ensure_ascii=False)
+# 현재 작업 정보
+tasks = st.session_state['tasks']
+if st.session_state['current_task_idx'] >= len(tasks):
+    st.session_state['step'] = 'finish'
 
-    html_code = f"""
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-    <meta charset="UTF-8">
-    <style>
-        body {{ font-family: "Pretendard", sans-serif; padding: 10px; background: #f8f9fa; }}
-        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
-        .step {{ display: none; }} .active {{ display: block; }}
-        
-        /* 랭킹 보드 스타일 */
-        .ranking-board {{ background: #f1f3f5; padding: 18px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #dee2e6; }}
-        .board-title {{ font-weight: bold; color: #495057; font-size: 0.9em; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }}
-        .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
-        .board-item {{ 
-            min-width: 130px; background: white; padding: 12px; border-radius: 12px; 
-            text-align: center; border: 1px solid #dee2e6; 
-            flex: 1; display: flex; flex-direction: column; gap: 5px; 
-        }}
-        .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
-        .rank-val {{ font-weight: bold; color: #228be6; font-size: 0.9em; }}
+# ==============================================================================
+# [UI] 단계별 화면
+# ==============================================================================
 
-        .card {{ background: #fff; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px; border: 1px solid #e9ecef; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }}
-        input[type=range] {{ -webkit-appearance: none; width: 100%; height: 12px; background: #dee2e6; border-radius: 6px; outline: none; margin: 35px 0; }}
-        input[type=range]::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #228be6; border: 4px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2); position: relative; z-index: 5; }}
-
-        /* 버튼 스타일 */
-        .btn-area {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }}
-        .btn {{ width: 100%; padding: 15px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1.1em; font-weight: bold; cursor: pointer; }}
-        .btn-secondary {{ background: #adb5bd; }}
-        .btn-reset {{ background: #ffc9c9; color: #e03131; }} /* 순위 변경 버튼 (붉은색 계열) */
-        
-        .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999; }}
-        .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; }}
-        
-        .flip-list {{ text-align: left; background: #fff5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffc9c9; font-size: 0.9em; color: #c92a2a; }}
-        .flip-item {{ margin-bottom: 4px; font-weight: bold; }}
-    </style>
-    </head>
-    <body>
-    <div class="container">
-        <h3 id="task-title" style="margin-top:0; color:#212529;"></h3>
-
-        <div id="live-board" class="ranking-board" style="display:none;">
-            <div class="board-title">📊 실시간 가중치 순위</div>
-            <div id="board-grid" class="board-grid"></div>
-        </div>
-
-        <div id="step-ranking" class="step">
-            <p><b>1단계:</b> 각 항목의 중요도 순위를 먼저 정해주세요.</p>
-            <div id="ranking-list" style="margin-bottom:20px;"></div>
-            <button class="btn" onclick="startCompare()">설문 시작하기</button>
-        </div>
-
-        <div id="step-compare" class="step">
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:1.4em; margin-bottom:20px;">
-                    <span id="item-a" style="color:#228be6;">A</span>
-                    <span style="color:#dee2e6;">VS</span>
-                    <span id="item-b" style="color:#fa5252;">B</span>
-                </div>
-                <div style="font-size:0.95em; color:#adb5bd; margin-bottom:10px;">
-                    (기존 순위: <span id="hint-a"></span>위) vs (기존 순위: <span id="hint-b"></span>위)
-                </div>
-                <input type="range" id="slider" min="-4" max="4" value="0" step="1" oninput="updateUI()">
-                <div id="val-display" style="font-weight:bold; color:#343a40; font-size:1.4em;">동등함</div>
-            </div>
-            
-            <div id="btn-area" class="btn-area"></div>
-        </div>
-
-        <div id="step-finish" class="step">
-            <div style="text-align:center; padding:40px 0;">
-                <h2>✅ 모든 설문 완료</h2>
-                <textarea id="result-code" readonly style="width:100%; height:150px; padding:15px; border-radius:12px; border:1px solid #dee2e6; background:#f8f9fa; font-family:monospace;"></textarea>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-flip" class="modal">
-        <div class="modal-box">
-            <h3 style="color:#fa5252; margin-top:0;">⚠️ 순위 역전 감지</h3>
-            <p style="font-size:0.95em; color:#495057; line-height:1.7; margin-bottom:15px;">
-                설정하신 순위와 달리, 아래 항목들의 점수가 뒤집혔습니다.<br>
-                (동점은 허용되지만, <b>확실히 낮아진 경우</b>입니다)
-            </p>
-            <div id="flip-details" class="flip-list"></div>
-            <div style="display:grid; gap:12px;">
-                <button class="btn" onclick="closeModal('flip', 'resurvey')" style="background:#228be6;">👈 응답 수정 (기존 순위 유지)</button>
-                <button class="btn" onclick="closeModal('flip', 'updaterank')" style="background:#868e96;">✅ 변경 인정 (설정값 업데이트)</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const tasks = {js_tasks};
-        let currentTaskIdx = 0, items = [], pairs = [], matrix = [], pairIdx = 0, initialRanks = [];
-        let allAnswers = {{}};
-
-        function loadTask() {{
-            if (currentTaskIdx >= tasks.length) {{ finishAll(); return; }}
-            const task = tasks[currentTaskIdx]; items = task.items;
-            document.getElementById('task-title').innerText = task.name;
-            const listDiv = document.getElementById('ranking-list'); listDiv.innerHTML = "";
-            let options = '<option value="" selected disabled>선택</option>';
-            for(let i=1; i<=items.length; i++) options += `<option value="${{i}}">${{i}}위</option>`;
-            items.forEach((item, idx) => {{
-                listDiv.innerHTML += `<div style="display:flex; justify-content:space-between; padding:14px; background:#f8f9fa; border-radius:10px; margin-bottom:10px; align-items:center; border:1px solid #eee;">
-                    <span style="font-weight:bold;">${{item}}</span><select id="rank-${{idx}}">${{options}}</select></div>`;
-            }});
-            showStep('step-ranking'); document.getElementById('live-board').style.display = 'none';
-        }}
-
-        function startCompare() {{
-            initialRanks = []; let tempIdxMap = [];
-            for(let i=0; i<items.length; i++) {{
-                const el = document.getElementById('rank-'+i);
-                if(!el.value) {{ alert("순위를 모두 정해주세요."); return; }}
-                initialRanks[i] = parseInt(el.value);
-                tempIdxMap.push({{ name: items[i], rank: initialRanks[i], originIdx: i }});
-            }}
-            if(new Set(initialRanks).size !== initialRanks.length) {{ alert("중복 순위가 있습니다."); return; }}
-            
-            tempIdxMap.sort((a, b) => a.rank - b.rank);
-            pairs = [];
-            for(let i=0; i<tempIdxMap.length; i++) {{
-                for(let j=i+1; j<tempIdxMap.length; j++) {{
-                    pairs.push({{ 
-                        r: tempIdxMap[i].originIdx, c: tempIdxMap[j].originIdx, 
-                        a: tempIdxMap[i].name, b: tempIdxMap[j].name 
-                    }});
-                }}
-            }}
-            const n = items.length; matrix = Array.from({{length: n}}, () => Array(n).fill(0));
-            for(let i=0; i<n; i++) matrix[i][i] = 1;
-            pairIdx = 0; showStep('step-compare'); renderPair();
-        }}
-
-        function renderPair() {{
-            const p = pairs[pairIdx];
-            document.getElementById('item-a').innerText = p.a; 
-            document.getElementById('item-b').innerText = p.b;
-            document.getElementById('hint-a').innerText = initialRanks[p.r];
-            document.getElementById('hint-b').innerText = initialRanks[p.c];
-            document.getElementById('slider').value = 0;
-            
-            // [버튼 로직 변경 핵심]
-            const btnArea = document.getElementById('btn-area');
-            if (pairIdx === 0) {{
-                // 첫 질문: [순위 재설정] + [다음]
-                btnArea.innerHTML = `
-                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 재설정</button>
-                    <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
-                `;
-            }} else {{
-                // 이후: [이전] + [다음]
-                btnArea.innerHTML = `
-                    <button class="btn btn-secondary" onclick="goBack()">⬅ 이전 질문</button>
-                    <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
-                `;
-            }}
-
-            document.getElementById('live-board').style.display = 'block';
-            updateUI();
-        }}
-
-        function updateUI() {{
-            const slider = document.getElementById('slider');
-            let val = parseInt(slider.value);
-            const p = pairs[pairIdx];
-
-            const disp = document.getElementById('val-display');
-            let perc = (val + 4) * 12.5;
-            if(val < 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 ${{perc}}%, #228be6 ${{perc}}%, #228be6 50%, #dee2e6 50%, #dee2e6 100%)`;
-            else if(val > 0) slider.style.background = `linear-gradient(to right, #dee2e6 0%, #dee2e6 50%, #fa5252 50%, #fa5252 ${{perc}}%, #dee2e6 ${{perc}}%, #dee2e6 100%)`;
-            else slider.style.background = '#dee2e6';
-
-            if(val == 0) disp.innerText = "동등함 (1:1)";
-            else if(val < 0) disp.innerText = `${{p.a}} ${{Math.abs(val)+1}}배 중요`;
-            else disp.innerText = `${{p.b}} ${{Math.abs(val)+1}}배 중요`; 
-            
-            updateBoard();
-        }}
-
-        function updateBoard() {{
-            const grid = document.getElementById('board-grid'); 
-            grid.innerHTML = "";
-            
-            let weights = calculateWeights();
-            const EPSILON = 0.00001;
-
-            // 현재 가중치 순위 계산
-            let sortedWeights = weights.map((w, i) => ({{w, i}})).sort((a,b) => b.w - a.w);
-            let rankMap = {{}};
-            let currentRank = 1;
-            sortedWeights.forEach((obj, idx) => {{
-                if (idx > 0 && Math.abs(obj.w - sortedWeights[idx-1].w) < EPSILON) {{}} else {{ currentRank = idx + 1; }}
-                rankMap[obj.i] = currentRank;
-            }});
-
-            // 설정 순서대로 카드 배치 (심플 버전)
-            let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
-                                    .sort((a,b) => a.org - b.org);
-
-            fixedOrder.forEach(item => {{
-                let curRank = rankMap[item.idx];
-                grid.innerHTML += `
-                <div class="board-item">
-                    <span class="item-name">${{item.name}}</span>
-                    <span class="rank-val">현재 ${{curRank}}위</span>
-                    <span style="font-size:0.8em; color:#868e96;">(설정 ${{item.org}}위)</span>
-                </div>`;
-            }});
-        }}
-
-        function calculateWeights(tempVal = null) {{
-            const n = items.length; 
-            let tempMatrix = matrix.map(row => [...row]);
-            let p = pairs[pairIdx];
-            let val = tempVal !== null ? tempVal : parseInt(document.getElementById('slider').value);
-            
-            let w_abs = Math.abs(val) + 1;
-            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
-
-            tempMatrix[p.r][p.c] = w_final; 
-            tempMatrix[p.c][p.r] = 1 / w_final;
-            
-            for(let i=0; i<n; i++) {{ for(let j=0; j<n; j++) {{ if(tempMatrix[i][j] === 0) tempMatrix[i][j] = 1; }} }}
-            let weights = tempMatrix.map(row => Math.pow(row.reduce((a, b) => a * b, 1), 1/n));
-            let sum = weights.reduce((a, b) => a + b, 0);
-            return weights.map(v => v / sum);
-        }}
-
-        function checkLogic() {{
-            if (pairIdx === 0) {{ saveAndNext(); return; }}
-            const sliderVal = parseInt(document.getElementById('slider').value);
-            let weights = calculateWeights(sliderVal);
-            const EPSILON = 0.00001;
-
-            let flippedPairs = [];
-            // 역전 감지 (가중치 기준)
-            for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(i === j) continue;
-                    // 원래 i<j (i가 상위)인데, 가중치는 i<j (i가 점수 낮음)
-                    if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
-                        flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
-                    }}
-                }}
-            }}
-
-            if (flippedPairs.length > 0) {{ 
-                const listDiv = document.getElementById('flip-details');
-                listDiv.innerHTML = "";
-                [...new Set(flippedPairs)].forEach(txt => {{
-                    listDiv.innerHTML += `<div class="flip-item">❌ ${{(txt)}}</div>`;
-                }});
-                document.getElementById('modal-flip').style.display = 'flex'; 
-                return; 
-            }}
-
-            saveAndNext();
-        }}
-
-        function closeModal(type, action) {{
-            document.getElementById('modal-' + type).style.display = 'none';
-            if(type === 'flip') {{
-                if(action === 'updaterank') {{
-                    let weights = calculateWeights();
-                    let sortedIdx = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
-                    sortedIdx.forEach((idx, i) => {{ initialRanks[idx] = i + 1; }});
-                    for (let k = pairIdx; k < pairs.length; k++) {{
-                        let p = pairs[k];
-                        if (initialRanks[p.r] > initialRanks[p.c]) {{
-                            let tr = p.r; pairs[k].r = p.c; pairs[k].c = tr;
-                            let ta = p.a; pairs[k].a = p.b; pairs[k].b = ta;
-                        }}
-                    }}
-                    saveAndNext();
-                }} else {{
-                    document.getElementById('slider').value = 0; updateUI();
-                }}
-            }}
-        }}
-
-        function resetTask() {{
-            if(confirm("순위 설정 화면으로 돌아가시겠습니까?\\n(현재 단계의 입력 내용은 초기화됩니다)")) {{ 
-                location.reload(); 
-            }}
-        }}
-
-        function goBack() {{ if (pairIdx > 0) {{ pairIdx--; renderPair(); }} }}
-
-        function saveAndNext() {{
-            const val = parseInt(document.getElementById('slider').value);
-            let w_abs = Math.abs(val) + 1;
-            let w_final = (val <= 0) ? w_abs : (1 / w_abs);
-
-            const p = pairs[pairIdx];
-            matrix[p.r][p.c] = w_final; matrix[p.c][p.r] = 1/w_final;
-            allAnswers[`[${{tasks[currentTaskIdx].name}}] ${{p.a}} vs ${{p.b}}`] = w_final.toFixed(2);
-            pairIdx++;
-            if (pairIdx >= pairs.length) {{ currentTaskIdx++; loadTask(); }}
-            else {{ renderPair(); }}
-        }}
-
-        function finishAll() {{
-            showStep('step-finish'); document.getElementById('live-board').style.display = 'none';
-            document.getElementById('result-code').value = JSON.stringify(allAnswers, null, 2);
-        }}
-
-        function showStep(id) {{ document.querySelectorAll('.step').forEach(e => e.classList.remove('active')); document.getElementById(id).classList.add('active'); }}
-        loadTask();
-    </script>
-    </body>
-    </html>
-    """
-    components.html(html_code, height=850, scrolling=True)
-
-    st.divider()
-    with st.form("save_v_final"):
-        respondent = st.text_input("응답자 성함")
-        code = st.text_area("결과 코드 붙여넣기")
+if st.session_state['step'] == 'finish':
+    st.success("모든 설문이 완료되었습니다!")
+    st.text_area("결과 코드", json.dumps(st.session_state['answers'], ensure_ascii=False, indent=2), height=200)
+    
+    with st.form("final_submit"):
+        name = st.text_input("응답자 성함")
         if st.form_submit_button("최종 제출"):
-            if respondent and code:
-                try:
-                    json.loads(code)
-                    goal_clean = survey_data["goal"].replace(" ", "_")
-                    secret_key = survey_data.get("secret_key", "public")
-                    if not os.path.exists("survey_data"): os.makedirs("survey_data")
-                    file_path = f"survey_data/{secret_key}_{goal_clean}.csv"
-                    save_dict = {"Time": datetime.now().strftime("%Y-%m-%d %H:%M"), "Respondent": respondent, "Raw_Data": code}
-                    df = pd.DataFrame([save_dict]); try: old_df = pd.read_csv(file_path); except: old_df = pd.DataFrame()
-                    pd.concat([old_df, df], ignore_index=True).to_csv(file_path, index=False)
-                    st.success("✅ 제출 성공!"); st.balloons()
-                except: st.error("코드 오류")
+            # 저장 로직
+            goal_clean = survey_data["goal"].replace(" ", "_")
+            secret_key = survey_data.get("secret_key", "public")
+            file_path = f"survey_data/{secret_key}_{goal_clean}.csv"
+            save_dict = {"Time": datetime.now().strftime("%Y-%m-%d %H:%M"), "Respondent": name, "Raw_Data": json.dumps(st.session_state['answers'])}
+            df = pd.DataFrame([save_dict])
+            try: old_df = pd.read_csv(file_path)
+            except: old_df = pd.DataFrame()
+            pd.concat([old_df, df], ignore_index=True).to_csv(file_path, index=False)
+            st.success("제출되었습니다!")
+            st.stop()
+
+elif st.session_state['step'] == 'ranking':
+    # --------------------------------------------------------------------------
+    # 1단계: 순위 설정
+    # --------------------------------------------------------------------------
+    current_task = tasks[st.session_state['current_task_idx']]
+    items = current_task['items']
+    
+    st.subheader(f"Step 1. {current_task['name']} - 순위 설정")
+    st.info("각 항목의 중요도 순위를 설정해주세요.")
+
+    # 순위 입력 폼
+    initial_ranks = {}
+    cols = st.columns(len(items))
+    for idx, item in enumerate(items):
+        with cols[idx]:
+            rank = st.selectbox(f"{item} 순위", options=range(1, len(items)+1), key=f"rank_{idx}")
+            initial_ranks[idx] = rank
+    
+    if st.button("설문 시작하기", type="primary"):
+        # 중복 체크
+        if len(set(initial_ranks.values())) != len(items):
+            st.error("순위가 중복되었습니다. 서로 다른 순위를 지정해주세요.")
+        else:
+            # 초기화 및 다음 단계로 이동
+            st.session_state['initial_ranks'] = initial_ranks
+            st.session_state['matrix'] = np.ones((len(items), len(items)))
+            
+            # 비교 쌍 생성
+            pairs = []
+            sorted_indices = sorted(initial_ranks, key=initial_ranks.get) # 순위대로 정렬
+            for i in range(len(sorted_indices)):
+                for j in range(i + 1, len(sorted_indices)):
+                    u, v = sorted_indices[i], sorted_indices[j]
+                    pairs.append({'u': u, 'v': v, 'a': items[u], 'b': items[v]})
+            
+            st.session_state['pairs'] = pairs
+            st.session_state['pair_idx'] = 0
+            st.session_state['step'] = 'compare'
+            st.rerun()
+
+elif st.session_state['step'] == 'compare':
+    # --------------------------------------------------------------------------
+    # 2단계: 쌍대 비교 (여기가 핵심)
+    # --------------------------------------------------------------------------
+    current_task = tasks[st.session_state['current_task_idx']]
+    items = current_task['items']
+    pairs = st.session_state['pairs']
+    pair_idx = st.session_state['pair_idx']
+    
+    # 완료 시 다음 태스크로
+    if pair_idx >= len(pairs):
+        st.session_state['current_task_idx'] += 1
+        st.session_state['step'] = 'ranking'
+        st.rerun()
+
+    p = pairs[pair_idx]
+    
+    # --- [상단] 랭킹 보드 (Red Border 로직 적용) ---
+    rank_map, weights = calculate_current_ranks(items, st.session_state['matrix'])
+    initial_ranks = st.session_state['initial_ranks']
+    
+    # 역전 감지 (쌍방 체크)
+    flipped_indices = set()
+    for i in range(len(items)):
+        for j in range(len(items)):
+            if i == j: continue
+            # 조건: 원래 i가 더 높았는데(숫자 작음), 현재 랭크가 더 낮아짐(숫자 큼)
+            if initial_ranks[i] < initial_ranks[j] and rank_map[i] > rank_map[j]:
+                flipped_indices.add(i)
+                flipped_indices.add(j)
+
+    st.subheader(f"📊 실시간 순위 현황")
+    
+    # 카드 렌더링
+    board_cols = st.columns(len(items))
+    sorted_display = sorted(range(len(items)), key=lambda x: initial_ranks[x])
+    
+    for idx, item_idx in enumerate(sorted_display):
+        is_flipped = item_idx in flipped_indices
+        css_class = "rank-card-red" if is_flipped else "rank-card"
+        text_class = "rank-current-red" if is_flipped else "rank-current"
+        
+        with board_cols[idx]:
+            st.markdown(f"""
+            <div class="{css_class}">
+                <div class="rank-title">{items[item_idx]}</div>
+                <div class="rank-info">설정: {initial_ranks[item_idx]}위</div>
+                <div class="{text_class}">현재: {rank_map[item_idx]}위</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    if flipped_indices:
+        st.warning("⚠️ 순위 역전이 감지되었습니다! (붉은 테두리 항목)")
+
+    # --- [중단] 질문 카드 ---
+    st.markdown("---")
+    st.markdown(f"### Q{pair_idx+1}. 두 항목 중 무엇이 더 중요합니까?")
+    
+    col1, col2, col3 = st.columns([1, 8, 1])
+    with col1: st.markdown(f"<h3 style='text-align:right; color:#228be6'>{p['a']}</h3>", unsafe_allow_html=True)
+    with col3: st.markdown(f"<h3 style='text-align:left; color:#fa5252'>{p['b']}</h3>", unsafe_allow_html=True)
+    
+    with col2:
+        # 슬라이더 값 매핑 로직
+        # 0: 동등, -1~-4: A우세, 1~4: B우세
+        
+        # 이전 값이 있으면 불러오기
+        prev_val = 0
+        current_val = st.slider("비교", min_value=-4, max_value=4, value=0, step=1, key=f"slider_{pair_idx}", label_visibility="collapsed")
+        
+        # 텍스트 표시
+        if current_val == 0:
+            st.markdown("<h4 style='text-align:center;'>동등함 (1:1)</h4>", unsafe_allow_html=True)
+        elif current_val < 0:
+            st.markdown(f"<h4 style='text-align:center; color:#228be6'>{p['a']} 가 {abs(current_val)+1}배 중요</h4>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<h4 style='text-align:center; color:#fa5252'>{p['b']} 가 {abs(current_val)+1}배 중요</h4>", unsafe_allow_html=True)
+
+    # --- [하단] 네비게이션 버튼 (핵심 요청 사항) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    b_col1, b_col2 = st.columns([1, 1])
+    
+    # 버튼 로직
+    with b_col1:
+        if pair_idx == 0:
+            # 첫 질문일 때 -> 순위 재설정 버튼 (붉은색 스타일)
+            if st.button("🔄 순위 재설정", type="primary", use_container_width=True):
+                st.session_state['step'] = 'ranking'
+                st.rerun()
+        else:
+            # 이후 질문 -> 이전 버튼
+            if st.button("⬅ 이전 질문", use_container_width=True):
+                st.session_state['pair_idx'] -= 1
+                st.rerun()
+    
+    with b_col2:
+        if st.button("다음 질문 ➡", type="secondary", use_container_width=True):
+            # 값 저장 로직 (파이썬)
+            val = current_val
+            w = 1.0
+            if val == 0: w = 1.0
+            elif val < 0: w = abs(val) + 1.0 # A 우세
+            else: w = 1.0 / (val + 1.0)      # B 우세
+            
+            # 매트릭스 업데이트
+            st.session_state['matrix'][p['u']][p['v']] = w
+            st.session_state['matrix'][p['v']][p['u']] = 1.0 / w
+            
+            # 결과 기록
+            k = f"[{current_task['name']}] {p['a']} vs {p['b']}"
+            st.session_state['answers'][k] = round(w, 3)
+            
+            # 인덱스 증가
+            st.session_state['pair_idx'] += 1
+            st.rerun()
