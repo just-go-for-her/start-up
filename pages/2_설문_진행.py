@@ -72,36 +72,28 @@ else:
         .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
         .step {{ display: none; }} .active {{ display: block; }}
         
+        /* 랭킹 보드 스타일 (단순화) */
         .ranking-board {{ background: #f1f3f5; padding: 18px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #dee2e6; }}
         .board-title {{ font-weight: bold; color: #495057; font-size: 0.9em; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }}
-        .status-pill {{ padding: 4px 12px; border-radius: 20px; font-size: 0.82em; font-weight: bold; }}
-        
         .board-grid {{ display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }}
-        
         .board-item {{ 
-            min-width: 155px; background: white; padding: 12px; border-radius: 12px; 
+            min-width: 130px; background: white; padding: 12px; border-radius: 12px; 
             text-align: center; border: 1px solid #dee2e6; 
-            flex: 1; display: flex; flex-direction: column; gap: 8px; 
-            transition: all 0.2s ease;
+            flex: 1; display: flex; flex-direction: column; gap: 5px; 
         }}
-        
         .item-name {{ font-weight: 800; color: #343a40; border-bottom: 1px solid #f1f3f5; padding-bottom: 6px; }}
-        .rank-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: #666; padding: 0 4px; }}
-        .rank-val {{ font-weight: bold; color: #444; }}
-        .error-text {{ color: #fa5252 !important; font-weight: 800; }}
-        .match-text {{ color: #228be6; }}
+        .rank-val {{ font-weight: bold; color: #228be6; font-size: 0.9em; }}
 
         .card {{ background: #fff; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px; border: 1px solid #e9ecef; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }}
         input[type=range] {{ -webkit-appearance: none; width: 100%; height: 12px; background: #dee2e6; border-radius: 6px; outline: none; margin: 35px 0; }}
         input[type=range]::-webkit-slider-thumb {{ -webkit-appearance: none; appearance: none; width: 28px; height: 28px; background: #228be6; border: 4px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2); position: relative; z-index: 5; }}
 
+        /* 버튼 스타일 */
+        .btn-area {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }}
         .btn {{ width: 100%; padding: 15px; background: #228be6; color: white; border: none; border-radius: 10px; font-size: 1.1em; font-weight: bold; cursor: pointer; }}
         .btn-secondary {{ background: #adb5bd; }}
-        .btn-reset {{ background: #ffc9c9; color: #e03131; }}
+        .btn-reset {{ background: #ffc9c9; color: #e03131; }} /* 순위 변경 버튼 (붉은색 계열) */
         
-        .two-btn-group {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
-        .split-btn-group {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }}
-
         .modal {{ display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999; }}
         .modal-box {{ background:white; padding:35px; border-radius:20px; width:90%; max-width:450px; text-align:center; }}
         
@@ -114,10 +106,7 @@ else:
         <h3 id="task-title" style="margin-top:0; color:#212529;"></h3>
 
         <div id="live-board" class="ranking-board" style="display:none;">
-            <div class="board-title">
-                <span>📊 실시간 순위 현황 (기본 순서 고정)</span>
-                <span id="status-pill" class="status-pill">체크 중</span>
-            </div>
+            <div class="board-title">📊 실시간 가중치 순위</div>
             <div id="board-grid" class="board-grid"></div>
         </div>
 
@@ -141,7 +130,7 @@ else:
                 <div id="val-display" style="font-weight:bold; color:#343a40; font-size:1.4em;">동등함</div>
             </div>
             
-            <div id="btn-area"></div>
+            <div id="btn-area" class="btn-area"></div>
         </div>
 
         <div id="step-finish" class="step">
@@ -219,20 +208,20 @@ else:
             document.getElementById('hint-b').innerText = initialRanks[p.c];
             document.getElementById('slider').value = 0;
             
+            // [버튼 로직 변경]
             const btnArea = document.getElementById('btn-area');
             if (pairIdx === 0) {{
+                // 첫 질문: [순위 변경] [다음]
                 btnArea.innerHTML = `
-                <div class="two-btn-group">
-                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 바꾸기</button>
-                    <button class="btn" onclick="checkLogic()">다음 ➡</button>
-                </div>`;
+                    <button class="btn btn-reset" onclick="resetTask()">🔄 순위 변경</button>
+                    <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
+                `;
             }} else {{
+                // 이후: [이전] [다음]
                 btnArea.innerHTML = `
-                <div class="split-btn-group">
-                    <button class="btn btn-secondary" onclick="goBack()">⬅ 이전</button>
-                    <div style="width:100%"></div>
-                    <button class="btn" onclick="checkLogic()">다음 ➡</button>
-                </div>`;
+                    <button class="btn btn-secondary" onclick="goBack()">⬅ 이전 질문</button>
+                    <button class="btn" onclick="checkLogic()">다음 질문 ➡</button>
+                `;
             }}
 
             document.getElementById('live-board').style.display = 'block';
@@ -243,6 +232,8 @@ else:
             const slider = document.getElementById('slider');
             let val = parseInt(slider.value);
             const p = pairs[pairIdx];
+
+            // 오른쪽 이동 제한 Alert 제거됨 (자유 이동)
 
             const disp = document.getElementById('val-display');
             let perc = (val + 4) * 12.5;
@@ -260,79 +251,32 @@ else:
         function updateBoard() {{
             const grid = document.getElementById('board-grid'); 
             grid.innerHTML = "";
-            const pill = document.getElementById('status-pill');
             
             let weights = calculateWeights();
             const EPSILON = 0.00001;
 
-            // 1. 현재 가중치 기반 순위 계산 (보여주기용 & 비교용)
-            // 중복 가중치(동점) 처리 포함
+            // 현재 가중치 순위 계산 (보여주기용)
             let sortedWeights = weights.map((w, i) => ({{w, i}})).sort((a,b) => b.w - a.w);
-            let rankMap = {{}}; // index -> rank
+            let rankMap = {{}};
             let currentRank = 1;
             sortedWeights.forEach((obj, idx) => {{
                 if (idx > 0 && Math.abs(obj.w - sortedWeights[idx-1].w) < EPSILON) {{}} else {{ currentRank = idx + 1; }}
                 rankMap[obj.i] = currentRank;
             }});
 
-            // [핵심] 순위 역전 감지 (쌍방 체크)
-            let flippedIndices = new Set();
-            for(let i=0; i<items.length; i++) {{
-                for(let j=0; j<items.length; j++) {{
-                    if(i === j) continue;
-                    
-                    let initRankI = initialRanks[i];
-                    let initRankJ = initialRanks[j];
-                    let curRankI = rankMap[i];
-                    let curRankJ = rankMap[j];
-
-                    // 조건: 원래 i가 상위(1등)였는데, 지금 i가 하위(3등)가 됨. (j와 비교 시)
-                    // 즉, i < j 였는데, i > j 가 됨 (순위 숫자가 클수록 하위)
-                    if (initRankI < initRankJ && curRankI > curRankJ) {{
-                        flippedIndices.add(i); // 나 (순위 떨어짐)
-                        flippedIndices.add(j); // 너 (순위 올라감)
-                    }}
-                }}
-            }}
-
-            let hasFlip = (flippedIndices.size > 0);
+            // 설정 순서대로 카드 배치 (붉은 테두리 로직 완전 제거 -> 깔끔한 정보 제공)
             let fixedOrder = items.map((name, i) => ({{name, org: initialRanks[i], idx: i}}))
                                     .sort((a,b) => a.org - b.org);
 
-            if (pairIdx === 0) {{
-                pill.innerText = "✅ 순위 설정 완료"; pill.style.background = "#ebfbee"; pill.style.color = "#2f9e44";
-                fixedOrder.forEach(item => {{
-                    grid.innerHTML += createCard(item.name, item.org, item.org, false);
-                }});
-            }} else {{
-                if(hasFlip) {{
-                    pill.innerText = `⚠️ 순위 역전 감지`; 
-                    pill.style.background = "#fff5f5"; pill.style.color = "#fa5252";
-                }} else {{
-                    pill.innerText = "✅ 논리 일치"; 
-                    pill.style.background = "#ebfbee"; pill.style.color = "#2f9e44";
-                }}
-
-                fixedOrder.forEach(item => {{
-                    let isFlipped = flippedIndices.has(item.idx);
-                    let curRank = rankMap[item.idx];
-                    grid.innerHTML += createCard(item.name, item.org, curRank, isFlipped);
-                }});
-            }}
-        }}
-
-        function createCard(name, oldRank, newRank, isFlipped) {{
-            // 스타일 강제 적용 (인라인)
-            let borderStyle = isFlipped ? "3px solid #fa5252 !important" : "1px solid #dee2e6";
-            let bgStyle = isFlipped ? "#fff5f5 !important" : "white";
-            let textColorClass = isFlipped ? "error-text" : "match-text";
-            
-            return `
-            <div class="board-item" style="border: ${{borderStyle}}; background-color: ${{bgStyle}};">
-                <span class="item-name">${{name}}</span>
-                <div class="rank-row"><span>기존:</span><span class="rank-val">${{oldRank}}위</span></div>
-                <div class="rank-row"><span>현재:</span><span class="rank-val ${{textColorClass}}">${{newRank}}위</span></div>
-            </div>`;
+            fixedOrder.forEach(item => {{
+                let curRank = rankMap[item.idx];
+                grid.innerHTML += `
+                <div class="board-item">
+                    <span class="item-name">${{item.name}}</span>
+                    <span class="rank-val">현재 ${{curRank}}위</span>
+                    <span style="font-size:0.8em; color:#868e96;">(설정 ${{item.org}}위)</span>
+                </div>`;
+            }});
         }}
 
         function calculateWeights(tempVal = null) {{
@@ -360,10 +304,11 @@ else:
             const EPSILON = 0.00001;
 
             let flippedPairs = [];
+            // 역전 감지 (모달용 텍스트 생성)
             for(let i=0; i<items.length; i++) {{
                 for(let j=0; j<items.length; j++) {{
                     if(i === j) continue;
-                    // 역전 감지 (모달용 텍스트) - 가중치 기준
+                    // 원래 i<j (i가 상위)인데, 가중치는 i<j (i가 점수 낮음)
                     if(initialRanks[i] < initialRanks[j] && weights[i] < weights[j] - EPSILON) {{
                         flippedPairs.push(`${{items[i]}} (설정: ${{initialRanks[i]}}위) ↔ ${{items[j]}} (설정: ${{initialRanks[j]}}위)`);
                     }}
@@ -405,7 +350,9 @@ else:
         }}
 
         function resetTask() {{
-            if(confirm("정말 처음(순위 설정)부터 다시 하시겠습니까?")) {{ location.reload(); }}
+            if(confirm("순위 설정 화면으로 돌아가시겠습니까?\\n(현재 단계의 입력 내용은 초기화됩니다)")) {{ 
+                location.reload(); 
+            }}
         }}
 
         function goBack() {{ if (pairIdx > 0) {{ pairIdx--; renderPair(); }} }}
